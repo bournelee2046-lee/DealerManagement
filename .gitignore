@@ -1,0 +1,52 @@
+# 数据库文件
+*.db
+*.db-shm
+*.db-wal
+
+# Excel 数据文件
+*.xlsx
+*.xls
+
+# 上传文件
+uploads/
+
+# 历史日报
+历史日报/
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db

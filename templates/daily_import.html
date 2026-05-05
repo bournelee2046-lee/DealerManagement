@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日报导入</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .container { max-width: 1400px; margin-top: 30px; }
+        .upload-area { border: 2px dashed #007bff; padding: 30px; text-align: center; border-radius: 10px; cursor: pointer; transition: all 0.3s; }
+        .upload-area:hover { background-color: #e9f5ff; }
+        .upload-area.dragover { background-color: #cce5ff; }
+        .message { margin-top: 20px; padding: 15px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        table { font-size: 12px; }
+        th, td { white-space: nowrap; }
+        .table-container { overflow-x: auto; }
+        .btn-import { font-size: 1.1rem; padding: 10px 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">日报导入</h1>
+        <nav aria-label="breadcrumb" class="mb-4">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">异常店治理</a></li>
+                <li class="breadcrumb-item active" aria-current="page">日报导入</li>
+            </ol>
+        </nav>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>导入日报数据</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="start_date" class="form-label">开始日期</label>
+                        <input type="date" class="form-control" id="start_date" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="end_date" class="form-label">结束日期</label>
+                        <input type="date" class="form-control" id="end_date" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="source" class="form-label">到店数来源</label>
+                        <select class="form-select" id="source" required>
+                            <option value="打铁系统">打铁系统</option>
+                            <option value="零售部" selected>零售部</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-primary btn-import w-100" id="importBtn" onclick="startImport()" disabled>
+                            导入文件
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="upload-area" id="uploadArea">
+                            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                            <h4>点击或拖拽文件到此处</h4>
+                            <p class="text-muted" id="fileInfo">支持 .xlsx 和 .xls 格式</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="message"></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5>数据预览</h5>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <div class="input-group" style="width: 300px;">
+                        <input type="text" class="form-control" id="searchInput" placeholder="搜索店编号或店简称">
+                        <button class="btn btn-outline-primary" type="button" onclick="loadData()">搜索</button>
+                    </div>
+                    <select class="form-select" id="dateFilter" style="width: 200px;">
+                        <option value="">全部日期</option>
+                        {% for date in existing_dates %}
+                        <option value="{{ date }}">{{ date }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-primary" onclick="loadData()">刷新</button>
+                </div>
+            </div>
+            <div class="card-body table-container">
+                <table class="table table-striped table-bordered" id="dataTable">
+                    <thead class="table-dark">
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const messageDiv = document.getElementById('message');
+        const importBtn = document.getElementById('importBtn');
+        const fileInfo = document.getElementById('fileInfo');
+        
+        let selectedFile = null; // 存储选择的文件
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                selectFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                selectFile(e.target.files[0]);
+            }
+        });
+        
+        // 选择文件，暂不执行导入
+        function selectFile(file) {
+            selectedFile = file;
+            // 更新界面显示已选择的文件
+            uploadArea.querySelector('h4').textContent = `已选择: ${file.name}`;
+            fileInfo.textContent = '点击「导入文件」按钮开始导入';
+            // 启用导入按钮
+            importBtn.disabled = false;
+            // 清空消息
+            messageDiv.innerHTML = '';
+        }
+        
+        // 点击导入按钮时执行
+        function startImport() {
+            if (!selectedFile) {
+                showMessage('请先选择文件', 'error');
+                return;
+            }
+            
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const source = document.getElementById('source').value;
+            
+            if (!startDate || !endDate) {
+                showMessage('请先选择日期范围', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('start_date', startDate);
+            formData.append('end_date', endDate);
+            formData.append('source', source);
+            
+            uploadArea.querySelector('h4').textContent = '正在处理文件...';
+            fileInfo.textContent = '请稍候';
+            importBtn.disabled = true;
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    loadData();
+                    updateDateFilter();
+                    resetUploadArea();
+                } else {
+                    showMessage(data.message, 'error');
+                    importBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                showMessage('请求失败: ' + error, 'error');
+                importBtn.disabled = false;
+            });
+        }
+        
+        function showMessage(text, type) {
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+        }
+        
+        function resetUploadArea() {
+            selectedFile = null;
+            uploadArea.querySelector('h4').textContent = '点击或拖拽文件到此处';
+            fileInfo.textContent = '支持 .xlsx 和 .xls 格式';
+            importBtn.disabled = true;
+            fileInput.value = '';
+        }
+        
+        function loadData() {
+            const dateFilter = document.getElementById('dateFilter').value;
+            const searchText = document.getElementById('searchInput').value;
+            let url = '/data';
+            const params = new URLSearchParams();
+            if (dateFilter) {
+                params.append('date', dateFilter);
+            }
+            if (searchText) {
+                params.append('search', searchText);
+            }
+            // 限制返回数据量，防止页面卡顿
+            params.append('limit', 2000);
+            
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+            
+            fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                renderTable(data.data);
+            })
+            .catch(error => {
+                showMessage('加载数据失败: ' + error, 'error');
+            });
+        }
+        
+        function renderTable(data) {
+            const table = document.getElementById('dataTable');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+            
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="100%" class="text-center">暂无数据</td></tr>';
+                return;
+            }
+            
+            // 限制显示前1000条数据，防止页面卡顿
+            const displayData = data.slice(0, 1000);
+            if (data.length > 1000) {
+                console.log(`数据太多，只显示前1000条，共${data.length}条`);
+            }
+            
+            const headers = Object.keys(displayData[0]);
+            
+            // 构建表头
+            let headerHtml = '<tr>';
+            headers.forEach(h => headerHtml += `<th>${h}</th>`);
+            headerHtml += '</tr>';
+            thead.innerHTML = headerHtml;
+            
+            // 优化：一次性构建所有行HTML，再设置
+            let bodyHtml = '';
+            displayData.forEach(row => {
+                let rowHtml = '<tr>';
+                headers.forEach(h => rowHtml += `<td>${row[h] || ''}</td>`);
+                rowHtml += '</tr>';
+                bodyHtml += rowHtml;
+            });
+            tbody.innerHTML = bodyHtml;
+        }
+        
+        function updateDateFilter() {
+            fetch('/dates')
+            .then(response => response.json())
+            .then(data => {
+                const dateFilter = document.getElementById('dateFilter');
+                // 保存当前选中的值
+                const currentValue = dateFilter.value;
+                
+                // 重建选项
+                let html = '<option value="">全部日期</option>';
+                data.dates.forEach(date => {
+                    html += `<option value="${date}">${date}</option>`;
+                });
+                dateFilter.innerHTML = html;
+                
+                // 恢复之前选中的值
+                if (currentValue) {
+                    dateFilter.value = currentValue;
+                }
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', loadData);
+        
+        document.getElementById('dateFilter').addEventListener('change', loadData);
+        
+        // 回车键搜索
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loadData();
+            }
+        });
+    </script>
+</body>
+</html>
