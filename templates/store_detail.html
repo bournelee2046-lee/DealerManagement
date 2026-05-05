@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>门店详情</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .container { max-width: 1600px; margin-top: 20px; }
+        .card { margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .card-header { background-color: #f8f9fa; font-weight: 600; }
+        .user-dropdown { min-width: 200px; }
+        .nav-pills .nav-link.active { background-color: #0d6efd; }
+        .nav-pills .nav-link { color: #495057; }
+        .stat-card {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .stat-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-value { font-size: 1.5rem; font-weight: 700; }
+        .stat-label { font-size: 0.85rem; opacity: 0.9; }
+        .table-responsive { font-size: 0.9rem; }
+        .empty-state { text-align: center; padding: 40px 20px; color: #6c757d; }
+        .empty-state i { font-size: 3rem; opacity: 0.3; }
+        .trend-chart-container { height: 350px; }
+        .history-item { border-left: 3px solid #0d6efd; padding-left: 15px; margin-bottom: 15px; }
+        .history-date { font-weight: 600; color: #0d6efd; margin-bottom: 5px; }
+        .history-meta { font-size: 0.85rem; color: #6c757d; }
+        .operator-badge { background: #0d6efd; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; }
+        .reason-badge { display: inline-block; padding: 4px 10px; margin: 2px; border-radius: 12px; font-size: 0.8rem; background: #e9ecef; }
+        .store-info-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .store-info-item:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center">
+                <a class="navbar-brand me-3" href="/">
+                    <i class="bi bi-shop"></i> 异常店治理工具
+                </a>
+                <ul class="nav nav-pills nav-fill">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/" style="color: rgba(255,255,255,0.85);">
+                            <i class="bi bi-house"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/daily_import" style="color: rgba(255,255,255,0.85);">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> 日报导入
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/follow_up" style="color: rgba(255,255,255,0.85);">
+                            <i class="bi bi-clipboard-check"></i> 门店跟进治理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/store_profile" style="color: white;">
+                            <i class="bi bi-file-person"></i> 门店档案
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="d-flex align-items-center">
+                <a href="/operation_logs" class="btn btn-outline-light btn-sm me-3">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+                <div class="dropdown">
+                    <button class="btn btn-outline-light dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle"></i>
+                        <span id="currentUserName">未登录</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end user-dropdown">
+                        <li><h6 class="dropdown-header">切换用户</h6></li>
+                        <div id="userList"></div>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                                <i class="bi bi-person-plus"></i> 添加新用户
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">首页</a></li>
+                <li class="breadcrumb-item"><a href="/store_profile">门店档案</a></li>
+                <li class="breadcrumb-item active" id="breadcrumbStoreName">门店详情</li>
+            </ol>
+        </nav>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <h4 id="storeName">门店详情</h4>
+                                <span class="badge bg-secondary me-2" id="storeRegion"></span>
+                                <span class="badge bg-secondary" id="storeWarZone"></span>
+                            </div>
+                            <a href="/store_profile" class="btn btn-outline-primary">
+                                <i class="bi bi-arrow-left"></i> 返回门店列表
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-header">门店基础信息</div>
+                            <div class="card-body" id="storeBasicInfo">
+                                <div class="text-center text-muted py-4">
+                                    <i class="bi bi-shop" style="font-size: 2rem;"></i>
+                                    <p class="mt-2">加载中...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label">开始日期</label>
+                                        <input type="date" class="form-control" id="startDate">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">结束日期</label>
+                                        <input type="date" class="form-control" id="endDate">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="btn btn-outline-success w-100" onclick="setDateRange(30)">近30天</button>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="btn btn-outline-success w-100" onclick="setDateRange(7)">近7天</button>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="btn btn-success w-100" onclick="loadDailyStats()">
+                                            <i class="bi bi-search"></i> 查询
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-graph-up"></i> 指标趋势图
+                    </div>
+                    <div class="card-body">
+                        <div class="trend-chart-container" id="trendChartContainer">
+                            <div class="empty-state">
+                                <i class="bi bi-bar-chart-line"></i>
+                                <p class="mt-2">请选择时间段查询数据</p>
+                            </div>
+                        </div>
+                        <div class="row mt-3 justify-content-center">
+                            <div class="col-auto d-flex align-items-center me-4">
+                                <span style="display: inline-block; width: 12px; height: 3px; background: #4facfe; vertical-align: middle;"></span>
+                                <small class="ms-2">线索量</small>
+                            </div>
+                            <div class="col-auto d-flex align-items-center me-4">
+                                <span style="display: inline-block; width: 12px; height: 3px; background: #43e97b; vertical-align: middle;"></span>
+                                <small class="ms-2">到店数</small>
+                            </div>
+                            <div class="col-auto d-flex align-items-center">
+                                <span style="display: inline-block; width: 12px; height: 3px; background: #fa709a; border-style: dashed; vertical-align: middle;"></span>
+                                <small class="ms-2">到店率</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-calculator"></i> 周期数据摘要
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="p-3 border rounded text-center">
+                                    <div class="text-muted small">周期内线索增量</div>
+                                    <div class="fs-4 fw-bold" id="clueIncrement">-</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="p-3 border rounded text-center">
+                                    <div class="text-muted small">周期内到店增量</div>
+                                    <div class="fs-4 fw-bold" id="arrivalIncrement">-</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="p-3 border rounded text-center">
+                                    <div class="text-muted small">平均到店率</div>
+                                    <div class="fs-4 fw-bold" id="avgArrivalRate">-</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="p-3 border rounded text-center">
+                                    <div class="text-muted small">数据天数</div>
+                                    <div class="fs-4 fw-bold" id="dataDays">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-clipboard-check"></i> 跟进历史记录
+                    </div>
+                    <div class="card-body">
+                        <div class="accordion" id="historyAccordion"></div>
+                        <div id="noHistoryMessage" class="empty-state">
+                            <i class="bi bi-inbox"></i>
+                            <h5 class="mt-2">暂无跟进记录</h5>
+                            <p>该门店暂无跟进记录</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-table"></i> 详细日报数据
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>日期</th>
+                                        <th>线索量-本地</th>
+                                        <th>到店数</th>
+                                        <th>到店率</th>
+                                        <th>线索增量</th>
+                                        <th>到店增量</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dailyDetailTable">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-5">请选择时间段查询数据</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加新用户</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" id="newUsername" placeholder="输入用户名">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="addNewUser()">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentUser = localStorage.getItem('currentUser') || '';
+        let storeCode = null;
+        let storeName = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUsers();
+            
+            const params = new URLSearchParams(window.location.search);
+            storeCode = window.location.pathname.split('/').pop();
+            storeName = params.get('name') || '门店详情';
+
+            document.getElementById('storeName').textContent = storeName;
+            document.getElementById('breadcrumbStoreName').textContent = storeName;
+
+            initDateInputs();
+            loadStoreBasicInfo();
+            loadHistoryRecords();
+
+            if (!currentUser) {
+                showLoginPrompt();
+            }
+        });
+
+        function initDateInputs() {
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            document.getElementById('endDate').value = formatDateInput(today);
+            document.getElementById('startDate').value = formatDateInput(thirtyDaysAgo);
+        }
+
+        function formatDateInput(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function setDateRange(days) {
+            const today = new Date();
+            const startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - days);
+
+            document.getElementById('startDate').value = formatDateInput(startDate);
+            document.getElementById('endDate').value = formatDateInput(today);
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users');
+                const result = await response.json();
+
+                if (result.success) {
+                    const userListEl = document.getElementById('userList');
+                    userListEl.innerHTML = '';
+
+                    result.data.forEach(user => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<a class="dropdown-item ${user.用户名 === currentUser ? 'active' : ''}" href="#" onclick="switchUser('${user.用户名}')">${user.用户名}</a>`;
+                        userListEl.appendChild(li);
+                    });
+
+                    updateUserDisplay();
+                }
+            } catch (error) {
+                console.error('加载用户列表失败:', error);
+            }
+        }
+
+        function updateUserDisplay() {
+            document.getElementById('currentUserName').textContent = currentUser || '未登录';
+        }
+
+        async function switchUser(username) {
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 用户名: username })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    currentUser = username;
+                    localStorage.setItem('currentUser', username);
+                    updateUserDisplay();
+                    await loadUsers();
+                }
+            } catch (error) {
+                console.error('切换用户失败:', error);
+            }
+        }
+
+        async function addNewUser() {
+            const username = document.getElementById('newUsername').value.trim();
+            if (!username) {
+                alert('请输入用户名');
+                return;
+            }
+
+            await switchUser(username);
+            bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+            document.getElementById('newUsername').value = '';
+        }
+
+        function showLoginPrompt() {
+            const username = prompt('请输入您的用户名：');
+            if (username && username.trim()) {
+                switchUser(username.trim());
+            }
+        }
+
+        async function loadStoreBasicInfo() {
+            if (!storeCode) return;
+
+            try {
+                const response = await fetch(`/api/store_profile/${storeCode}/basic_info`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+                    document.getElementById('storeRegion').textContent = data.大区 || '-';
+                    document.getElementById('storeWarZone').textContent = data.战区 || '-';
+                    
+                    document.getElementById('storeBasicInfo').innerHTML = `
+                        <div class="store-info-item">
+                            <span class="text-muted">店编号</span>
+                            <span class="fw-bold">${data.店编号 || '-'}</span>
+                        </div>
+                        <div class="store-info-item">
+                            <span class="text-muted">店简称</span>
+                            <span class="fw-bold">${data.店简称 || '-'}</span>
+                        </div>
+                        <div class="store-info-item">
+                            <span class="text-muted">大区</span>
+                            <span>${data.大区 || '-'}</span>
+                        </div>
+                        <div class="store-info-item">
+                            <span class="text-muted">战区</span>
+                            <span>${data.战区 || '-'}</span>
+                        </div>
+                        <div class="store-info-item">
+                            <span class="text-muted">大区经理</span>
+                            <span>${data.大区经理 || '-'}</span>
+                        </div>
+                        <div class="store-info-item">
+                            <span class="text-muted">战区经理</span>
+                            <span>${data.战区经理 || '-'}</span>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('加载门店信息失败:', error);
+            }
+        }
+
+        async function loadDailyStats() {
+            if (!storeCode) return;
+
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            try {
+                const response = await fetch(`/api/store_profile/${storeCode}/daily_stats?start_date=${startDate}&end_date=${endDate}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    renderDailyStatsSummary(result.data);
+                    renderTrendChart(result.data);
+                    renderDailyDetailTable(result.data);
+                }
+            } catch (error) {
+                console.error('加载日报数据失败:', error);
+            }
+        }
+
+        function renderDailyStatsSummary(data) {
+            if (data.length < 2) {
+                document.getElementById('clueIncrement').textContent = '-';
+                document.getElementById('arrivalIncrement').textContent = '-';
+                document.getElementById('avgArrivalRate').textContent = '-';
+                document.getElementById('dataDays').textContent = data.length;
+                return;
+            }
+
+            const first = data[0];
+            const last = data[data.length - 1];
+            const clueIncrement = (last.线索量数值 || 0) - (first.线索量数值 || 0);
+            const arrivalIncrement = (last.到店数数值 || 0) - (first.到店数数值 || 0);
+            const avgArrivalRate = data.reduce((sum, d) => sum + (d.到店率 || 0), 0) / data.length;
+
+            const clueEl = document.getElementById('clueIncrement');
+            clueEl.textContent = clueIncrement >= 0 ? `+${clueIncrement}` : clueIncrement;
+            clueEl.className = `fs-4 fw-bold ${clueIncrement >= 0 ? 'text-success' : 'text-danger'}`;
+
+            const arrivalEl = document.getElementById('arrivalIncrement');
+            arrivalEl.textContent = arrivalIncrement >= 0 ? `+${arrivalIncrement}` : arrivalIncrement;
+            arrivalEl.className = `fs-4 fw-bold ${arrivalIncrement >= 0 ? 'text-success' : 'text-danger'}`;
+
+            document.getElementById('avgArrivalRate').textContent = avgArrivalRate.toFixed(2) + '%';
+            document.getElementById('dataDays').textContent = data.length;
+        }
+
+        function renderTrendChart(data) {
+            const container = document.getElementById('trendChartContainer');
+
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty-state"><i class="bi bi-bar-chart-line"></i><p class="mt-2">暂无数据</p></div>';
+                return;
+            }
+
+            const dates = data.map(d => {
+                const dateStr = d['日报数据日期'];
+                if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    return `${parts[1]}/${parts[2]}`;
+                }
+                return dateStr.substring(5);
+            });
+            const clues = data.map(d => d['线索量数值'] || 0);
+            const arrivals = data.map(d => d['到店数数值'] || 0);
+            const rates = data.map(d => d['到店率'] || 0);
+
+            container.innerHTML = '<canvas id="trendChart"></canvas>';
+
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            if (window.trendChart && typeof window.trendChart.destroy === 'function') {
+                window.trendChart.destroy();
+                window.trendChart = null;
+            }
+
+            window.trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        {
+                            label: '线索量',
+                            data: clues,
+                            borderColor: '#4facfe',
+                            backgroundColor: 'rgba(79, 172, 254, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#4facfe',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '到店数',
+                            data: arrivals,
+                            borderColor: '#43e97b',
+                            backgroundColor: 'rgba(67, 233, 123, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#43e97b',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '到店率',
+                            data: rates,
+                            borderColor: '#fa709a',
+                            backgroundColor: 'rgba(250, 112, 154, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#fa709a',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            borderDash: [5, 5],
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                font: {
+                                    size: 12
+                                },
+                                color: '#495057'
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1,
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.datasetIndex === 2) {
+                                        label += context.parsed.y.toFixed(2) + '%';
+                                    } else {
+                                        label += context.parsed.y;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#6c757d',
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#4facfe',
+                                font: {
+                                    size: 11
+                                },
+                                callback: function(value) {
+                                    return value;
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '数量',
+                                color: '#4facfe',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                color: '#fa709a',
+                                font: {
+                                    size: 11
+                                },
+                                callback: function(value) {
+                                    return value.toFixed(1) + '%';
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '到店率',
+                                color: '#fa709a',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            min: 0,
+                            max: Math.max(...rates, 10) * 1.2
+                        }
+                    },
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+
+        function renderDailyDetailTable(data) {
+            const tbody = document.getElementById('dailyDetailTable');
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-5">暂无数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map((row, i) => {
+                const prevRow = i > 0 ? data[i - 1] : null;
+                const clueChange = prevRow ? (row['线索量数值'] - prevRow['线索量数值']) : 0;
+                const arrivalChange = prevRow ? (row['到店数数值'] - prevRow['到店数数值']) : 0;
+
+                return `
+                    <tr>
+                        <td>${row['日报数据日期']}</td>
+                        <td>${row['线索量数值'] || 0}</td>
+                        <td>${row['到店数数值'] || 0}</td>
+                        <td>${row['到店率'] || 0}%</td>
+                        <td class="${clueChange > 0 ? 'text-success' : clueChange < 0 ? 'text-danger' : ''}">
+                            ${clueChange > 0 ? '+' : ''}${clueChange}
+                        </td>
+                        <td class="${arrivalChange > 0 ? 'text-success' : arrivalChange < 0 ? 'text-danger' : ''}">
+                            ${arrivalChange > 0 ? '+' : ''}${arrivalChange}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadHistoryRecords() {
+            if (!storeCode) return;
+
+            try {
+                const response = await fetch(`/api/store_profile/${storeCode}/follow_history`);
+                const result = await response.json();
+
+                if (result.success && result.data.length > 0) {
+                    renderHistoryAccordion(result.data);
+                    document.getElementById('historyAccordion').style.display = 'block';
+                    document.getElementById('noHistoryMessage').style.display = 'none';
+                } else {
+                    document.getElementById('historyAccordion').innerHTML = '';
+                    document.getElementById('historyAccordion').style.display = 'none';
+                    document.getElementById('noHistoryMessage').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('加载历史记录失败:', error);
+            }
+        }
+
+        function renderHistoryAccordion(data) {
+            const groupedByTask = {};
+
+            data.forEach(record => {
+                const taskId = record.任务ID || 'default';
+                if (!groupedByTask[taskId]) {
+                    groupedByTask[taskId] = {
+                        taskName: record.周开始日期 ? `任务 ${record.周开始日期}` : `任务 #${taskId}`,
+                        records: []
+                    };
+                }
+                groupedByTask[taskId].records.push(record);
+            });
+
+            const accordion = document.getElementById('historyAccordion');
+            accordion.innerHTML = Object.entries(groupedByTask).map(([taskId, task], index) => `
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="heading${taskId}">
+                        <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse${taskId}">
+                            <i class="bi bi-folder2 me-2"></i>${task.taskName}
+                        </button>
+                    </h2>
+                    <div id="collapse${taskId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}">
+                        <div class="accordion-body">
+                            ${task.records.map(record => `
+                                <div class="history-item">
+                                    <div class="history-date">${record.日报数据日期}</div>
+                                    <div class="history-meta">
+                                        <span class="operator-badge">${record.操作人 || '未知'}</span>
+                                        <span class="ms-2">${record.创建时间 || ''}</span>
+                                    </div>
+                                    ${record.跟进原因 ? `<div class="mt-2"><strong>跟进原因：</strong>${record.跟进原因}</div>` : ''}
+                                    ${record.备注 ? `<div><strong>备注：</strong>${record.备注}</div>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>

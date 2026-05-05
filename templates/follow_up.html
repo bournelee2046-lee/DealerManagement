@@ -5,31 +5,1468 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>门店跟进治理</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
-        .container { max-width: 1400px; margin-top: 30px; }
-        .card { margin-bottom: 20px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .navbar { 
+            background: rgba(255,255,255,0.95) !important;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .navbar-brand { color: #667eea !important; font-weight: 700; }
+        .nav-link { color: #495057 !important; }
+        .nav-link:hover { color: #667eea !important; }
+        .container { max-width: 1800px; margin-top: 30px; }
+        .card { 
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border: none;
+            padding: 20px 24px;
+            font-weight: 600;
+            color: #495057;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 24px;
+            color: white;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(102, 126, 234, 0.4);
+        }
+        .stat-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-top: 8px;
+        }
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+            opacity: 0.9;
+        }
+        .task-item {
+            padding: 16px 20px;
+            border-left: 4px solid #dee2e6;
+            background: #f8f9fa;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .task-item:hover {
+            background: #e9ecef;
+            border-left-color: #667eea;
+        }
+        .task-item.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-left-color: transparent;
+        }
+        .task-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .task-meta {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 10px 24px;
+            font-weight: 600;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-outline-primary {
+            color: #667eea;
+            border-color: #667eea;
+            border-width: 2px;
+            font-weight: 600;
+            border-radius: 10px;
+            padding: 8px 20px;
+        }
+        .btn-outline-primary:hover {
+            background: #667eea;
+            border-color: #667eea;
+        }
+        .btn-outline-success {
+            color: #11998e;
+            border-color: #11998e;
+            border-width: 2px;
+            font-weight: 600;
+            border-radius: 10px;
+            padding: 8px 20px;
+        }
+        .btn-outline-success:hover {
+            background: #11998e;
+            border-color: #11998e;
+        }
+        .btn-outline-danger {
+            color: #dc3545;
+            border-color: #dc3545;
+            border-width: 2px;
+            font-weight: 600;
+            border-radius: 10px;
+            padding: 8px 20px;
+        }
+        .btn-outline-danger:hover {
+            background: #dc3545;
+            border-color: #dc3545;
+        }
+        .table {
+            margin-bottom: 0;
+        }
+        .table thead th {
+            background: #f8f9fa;
+            border: none;
+            font-weight: 600;
+            color: #495057;
+            padding: 16px;
+        }
+        .table tbody td {
+            padding: 14px 16px;
+            vertical-align: middle;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            padding: 10px 16px;
+            transition: all 0.2s ease;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+        }
+        .form-label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 80px 40px;
+            color: #adb5bd;
+        }
+        .empty-state i {
+            font-size: 5rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        .empty-state h4 {
+            color: #6c757d;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .reason-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 8px;
+        }
+        .reason-item.parent {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .reason-item.child {
+            margin-left: 20px;
+            background: #e9ecef;
+        }
+        .reason-text {
+            font-weight: 500;
+        }
+        .reason-actions button {
+            padding: 4px 8px;
+            margin-left: 4px;
+        }
+        .user-dropdown { min-width: 200px; }
+        .progress-bar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .badge-custom {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .badge-pending { background: #ffc107; color: #212529; }
+        .badge-done { background: #198754; color: white; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="mb-4">门店跟进治理</h1>
-        <nav aria-label="breadcrumb" class="mb-4">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="/">异常店治理</a></li>
-                <li class="breadcrumb-item active" aria-current="page">门店跟进治理</li>
-            </ol>
-        </nav>
-        
-        <div class="card">
-            <div class="card-header">
-                <h5>功能开发中</h5>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center">
+                <a class="navbar-brand me-4" href="/">
+                    <i class="bi bi-bag-dash me-2"></i>门店治理
+                </a>
+                <ul class="nav nav-pills">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/daily_import">日报导入</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/follow_up">跟进治理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/store_profile">门店档案</a>
+                    </li>
+                </ul>
             </div>
-            <div class="card-body">
-                <p class="text-muted">该功能正在开发中，敬请期待！</p>
+            <div class="d-flex align-items-center">
+                <a href="/operation_logs" class="btn btn-outline-primary btn-sm me-3">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-1"></i>
+                        <span id="currentUserName">未登录</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end user-dropdown">
+                        <li><h6 class="dropdown-header">切换用户</h6></li>
+                        <div id="userList"></div>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                                <i class="bi bi-person-plus me-2"></i>添加新用户
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-3">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-calendar-week me-2"></i>任务管理
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-4">
+                            <div class="col-8">
+                                <input type="week" class="form-control" id="weekSelector">
+                            </div>
+                            <div class="col-4">
+                                <button class="btn btn-primary w-100" onclick="createTask()">
+                                    <i class="bi bi-plus-lg"></i> 新建
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="row g-3 mb-4">
+                            <div class="col-6">
+                                <div class="stat-card">
+                                    <i class="bi bi-clipboard-list stat-icon"></i>
+                                    <div class="stat-value" id="taskCount">0</div>
+                                    <div class="stat-label">进行中任务</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="stat-card green">
+                                    <i class="bi bi-shop stat-icon"></i>
+                                    <div class="stat-value" id="storeCount">0</div>
+                                    <div class="stat-label">监测门店</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="taskList"></div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-gear me-2"></i>跟进原因配置</span>
+                        <button class="btn btn-outline-primary btn-sm" onclick="showAddReasonModal()">
+                            <i class="bi bi-plus"></i>
+                        </button>
+                    </div>
+                    <div class="card-body" style="max-height: 350px; overflow-y: auto;">
+                        <div id="reasonConfigList"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-9">
+                <div id="taskDetailCard" style="display: none;">
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <div>
+                                <h5 class="mb-0" id="taskTitle">本周跟进任务</h5>
+                                <small class="text-muted" id="taskDateRange"></small>
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button class="btn btn-outline-primary" onclick="showStoreSelectModal()">
+                                    <i class="bi bi-shop me-1"></i> 选择门店
+                                </button>
+                                <button class="btn btn-outline-success" onclick="generateWeeklyReport()">
+                                    <i class="bi bi-file-earmark-text me-1"></i> 生成报告
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="deleteCurrentTask()">
+                                    <i class="bi bi-trash me-1"></i> 删除
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <label class="form-label">跟进日期</label>
+                                    <input type="date" class="form-control" id="followDate" onchange="loadFollowRecords()">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">门店搜索</label>
+                                    <input type="text" class="form-control" id="storeSearch" placeholder="输入店编号或店简称" oninput="filterStores()">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">筛选状态</label>
+                                    <select class="form-select" id="statusFilter" onchange="filterStores()">
+                                        <option value="">全部</option>
+                                        <option value="done">已跟进</option>
+                                        <option value="pending">待跟进</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="card mb-4" style="background: #f8f9fa; border-radius: 12px; border: none;">
+                                <div class="card-body">
+                                    <div class="row g-4">
+                                        <div class="col-md-3">
+                                            <div class="text-center">
+                                                <div class="text-muted mb-1">完成进度</div>
+                                                <div class="display-5 fw-bold text-primary" id="progressPercent">0%</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <div class="h-100 d-flex align-items-center">
+                                                <div class="w-100">
+                                                    <div class="d-flex justify-content-between mb-2">
+                                                        <span class="fw-semibold"><i class="bi bi-check-circle text-success me-2"></i>已跟进：<span id="completedCount">0</span> 家</span>
+                                                        <span class="fw-semibold"><i class="bi bi-clock text-warning me-2"></i>待跟进：<span id="pendingCount">0</span> 家</span>
+                                                    </div>
+                                                    <div class="progress" style="height: 12px; border-radius: 6px;">
+                                                        <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 40px;">
+                                                <input type="checkbox" class="form-check-input" id="selectAll" onchange="toggleSelectAll()">
+                                            </th>
+                                            <th style="min-width: 100px;">店编号</th>
+                                            <th style="min-width: 120px;">店简称</th>
+                                            <th style="min-width: 80px;">大区</th>
+                                            <th style="min-width: 100px;">线索量</th>
+                                            <th style="min-width: 80px;">到店数</th>
+                                            <th style="min-width: 80px;">到店率</th>
+                                            <th style="min-width: 150px;">跟进原因</th>
+                                            <th style="min-width: 80px;">状态</th>
+                                            <th style="min-width: 160px;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="followTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="emptyStateCard" class="card">
+                    <div class="card-body empty-state">
+                        <i class="bi bi-clipboard-check"></i>
+                        <h4>暂无进行中的任务</h4>
+                        <p class="text-muted">选择周次并点击"新建"开始跟进治理工作</p>
+                        <button class="btn btn-primary btn-lg mt-3" onclick="createTask()">
+                            <i class="bi bi-plus-lg me-2"></i>创建新任务
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="reportCard" style="display: none;" class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-file-earmark-text me-2"></i>周统计报告</span>
+                        <button class="btn btn-outline-primary btn-sm" onclick="copyReport()">
+                            <i class="bi bi-clipboard me-1"></i>复制报告
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <textarea class="form-control" id="weeklyReport" rows="20" style="font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; line-height: 1.8;"></textarea>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-
+    
+    <div class="modal fade" id="storeSelectModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-shop me-2"></i>选择监测门店</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">选择基准日期</label>
+                            <select class="form-select" id="baseDateSelect" onchange="loadStoreStats()">
+                                <option value="">-- 请选择日期 --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">门店搜索</label>
+                            <input type="text" class="form-control" id="modalStoreSearch" placeholder="输入店编号或店简称" oninput="filterModalStores()">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="selectAllModal" onchange="toggleModalSelectAll()">
+                                <label class="form-check-label" for="selectAllModal">全选</label>
+                            </div>
+                            <span class="ms-4 fw-semibold text-primary" id="selectedCount">已选: 0</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                        <table class="table">
+                            <thead class="sticky-top" style="background: white; z-index: 10;">
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" class="form-check-input" id="modalSelectAll">
+                                    </th>
+                                    <th>店编号</th>
+                                    <th>店简称</th>
+                                    <th>大区</th>
+                                    <th style="cursor: pointer;" onclick="sortModalTable('线索量本地')">
+                                        线索量 <i id="sort-icon-线索量本地" class="bi bi-chevron-expand"></i>
+                                    </th>
+                                    <th style="cursor: pointer;" onclick="sortModalTable('到店数')">
+                                        到店数 <i id="sort-icon-到店数" class="bi bi-chevron-expand"></i>
+                                    </th>
+                                    <th style="cursor: pointer;" onclick="sortModalTable('到店率')">
+                                        到店率 <i id="sort-icon-到店率" class="bi bi-chevron-expand"></i>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="storeSelectTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmStoreSelection()">
+                        <i class="bi bi-check-lg me-1"></i>确认选择 (<span id="confirmCount">0</span>)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="followReasonModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-sticky me-2"></i>填写跟进原因</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="followRecordId">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card" style="background: #f8f9fa; border: none;">
+                                <div class="card-body">
+                                    <div class="store-info-item">
+                                        <span class="text-muted">店编号</span>
+                                        <span class="fw-bold" id="modalStoreCode">-</span>
+                                    </div>
+                                    <div class="store-info-item">
+                                        <span class="text-muted">店简称</span>
+                                        <span class="fw-bold" id="modalStoreName">-</span>
+                                    </div>
+                                    <div class="store-info-item">
+                                        <span class="text-muted">大区</span>
+                                        <span class="fw-bold" id="modalRegion">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+                                <div class="card-body text-center">
+                                    <div class="row g-3">
+                                        <div class="col-4">
+                                            <div class="opacity-75 small">线索量</div>
+                                            <div class="h3 fw-bold mb-0" id="modalClueCount">-</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="opacity-75 small">到店数</div>
+                                            <div class="h3 fw-bold mb-0" id="modalArrivalCount">-</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="opacity-75 small">到店率</div>
+                                            <div class="h3 fw-bold mb-0" id="modalArrivalRate">-</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label">选择跟进原因（可多选）</label>
+                        <div id="reasonOptions" class="mt-2"></div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label">备注说明</label>
+                        <textarea class="form-control" id="reasonRemark" rows="4" placeholder="如有额外说明，请在此补充..."></textarea>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <label class="form-label mb-0"><i class="bi bi-history me-1"></i>跟进历史记录</label>
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadHistoryRecords()">
+                                <i class="bi bi-arrow-clockwise me-1"></i>刷新
+                            </button>
+                        </div>
+                        <div id="historyRecords" class="card" style="background: #f8f9fa; border: none;">
+                            <div class="card-body text-center text-muted py-4">点击刷新查看历史记录</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveFollowReason()">
+                        <i class="bi bi-check-lg me-1"></i>保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="addReasonModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>添加跟进原因选项</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">原因类型</label>
+                        <select class="form-select" id="reasonTypeSelect" onchange="toggleParentSelect()">
+                            <option value="parent">一级原因（父分类）</option>
+                            <option value="child">二级原因（子分类）</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="parentSelectGroup">
+                        <label class="form-label">所属父分类</label>
+                        <select class="form-select" id="parentReasonSelect" disabled>
+                            <option value="0">-- 请选择父分类 --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">原因选项</label>
+                        <input type="text" class="form-control" id="newReasonText" placeholder="输入原因选项内容">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="addFollowReason()">
+                        <i class="bi bi-check-lg me-1"></i>添加
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="addUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>添加新用户</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" id="newUsername" placeholder="输入用户名">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="addNewUser()">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentTaskId = null;
+        let allTasks = [];
+        let storeStatsData = [];
+        let selectedStores = new Set();
+        let followReasons = [];
+        let taskStores = [];
+        let sortField = null;
+        let sortDirection = 'asc';
+        let currentUser = localStorage.getItem('currentUser') || '';
+        let modalSortField = null;
+        let modalSortDirection = 'desc'; // 默认降序，方便找最低值的门店
+        
+        const storeSelectModal = new bootstrap.Modal(document.getElementById('storeSelectModal'));
+        const followReasonModal = new bootstrap.Modal(document.getElementById('followReasonModal'));
+        const addReasonModal = new bootstrap.Modal(document.getElementById('addReasonModal'));
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUsers();
+            loadTasks();
+            loadFollowReasons();
+            initDateInputs();
+            
+            if (!currentUser) {
+                showLoginPrompt();
+            }
+        });
+        
+        function initDateInputs() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const week = getWeekNumber(now);
+            document.getElementById('weekSelector').value = `${year}-W${String(week).padStart(2, '0')}`;
+        }
+        
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+            return weekNo;
+        }
+        
+        function loadUsers() {
+            let users = JSON.parse(localStorage.getItem('users') || '["张三", "李四", "王五"]');
+            
+            if (users.length === 0) {
+                users = ["张三", "李四", "王五"];
+                localStorage.setItem('users', JSON.stringify(users));
+            }
+            
+            if (!currentUser) {
+                currentUser = users[0];
+                localStorage.setItem('currentUser', currentUser);
+            }
+            
+            document.getElementById('currentUserName').textContent = currentUser;
+            
+            const userListHtml = users.map(u => `
+                <li><a class="dropdown-item" href="#" onclick="switchUser('${u}')">${u}</a></li>
+            `).join('');
+            document.getElementById('userList').innerHTML = userListHtml;
+        }
+        
+        function switchUser(username) {
+            currentUser = username;
+            localStorage.setItem('currentUser', currentUser);
+            document.getElementById('currentUserName').textContent = currentUser;
+        }
+        
+        function showLoginPrompt() {
+            const users = JSON.parse(localStorage.getItem('users') || '["张三", "李四", "王五"]');
+            if (users.length > 0) {
+                switchUser(users[0]);
+            }
+        }
+        
+        function addNewUser() {
+            const username = document.getElementById('newUsername').value.trim();
+            if (!username) {
+                alert('请输入用户名');
+                return;
+            }
+            
+            let users = JSON.parse(localStorage.getItem('users') || '[]');
+            if (users.includes(username)) {
+                alert('该用户已存在');
+                return;
+            }
+            
+            users.push(username);
+            localStorage.setItem('users', JSON.stringify(users));
+            
+            switchUser(username);
+            bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+            document.getElementById('newUsername').value = '';
+        }
+        
+        async function loadTasks() {
+            try {
+                const response = await fetch('/api/follow_tasks');
+                const result = await response.json();
+                
+                if (result.success) {
+                    allTasks = result.data;
+                    renderTaskList();
+                    
+                    if (allTasks.length > 0) {
+                        selectTask(allTasks[0].id);
+                    }
+                }
+            } catch (error) {
+                console.error('加载任务失败:', error);
+            }
+        }
+        
+        function renderTaskList() {
+            const listHtml = allTasks.map(task => `
+                <div class="task-item ${task.id === currentTaskId ? 'active' : ''}" onclick="selectTask(${task.id})">
+                    <div class="task-title">${task.title}</div>
+                    <div class="task-meta">${task.dateRange}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('taskList').innerHTML = listHtml;
+            document.getElementById('taskCount').textContent = allTasks.length;
+        }
+        
+        async function selectTask(taskId) {
+            currentTaskId = taskId;
+            renderTaskList();
+            
+            try {
+                const response = await fetch(`/api/follow_tasks/${taskId}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    taskStores = result.data.stores || [];
+                    
+                    document.getElementById('taskTitle').textContent = result.data.title;
+                    document.getElementById('taskDateRange').textContent = result.data.dateRange;
+                    document.getElementById('storeCount').textContent = taskStores.length;
+                    
+                    document.getElementById('taskDetailCard').style.display = 'block';
+                    document.getElementById('emptyStateCard').style.display = 'none';
+                    document.getElementById('reportCard').style.display = 'none';
+                    
+                    loadFollowRecords();
+                }
+            } catch (error) {
+                console.error('加载任务详情失败:', error);
+            }
+        }
+        
+        async function createTask() {
+            const weekStr = document.getElementById('weekSelector').value;
+            if (!weekStr) {
+                alert('请选择周次');
+                return;
+            }
+            
+            const [year, week] = weekStr.split('-W');
+            const startDate = getDateOfWeek(year, week, 1);
+            const endDate = getDateOfWeek(year, week, 7);
+            
+            const title = `${year}年第${parseInt(week)}周跟进任务`;
+            const dateRange = `${formatDate(startDate)} 至 ${formatDate(endDate)}`;
+            
+            try {
+                const response = await fetch('/api/follow_tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ '周开始日期': formatDateInput(startDate), '门店列表': '', title })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadTasks();
+                    selectTask(result.data.id);
+                    document.getElementById('followDate').value = formatDateInput(startDate);
+                }
+            } catch (error) {
+                console.error('创建任务失败:', error);
+            }
+        }
+        
+        function getDateOfWeek(year, week, day) {
+            const d = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + (day - dayNum));
+            return d;
+        }
+        
+        function formatDate(d) {
+            return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+        }
+        
+        function formatDateInput(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        
+        async function deleteCurrentTask() {
+            if (!confirm('确定要删除此任务吗？相关的跟进记录也将被删除。')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/follow_tasks/${currentTaskId}`, { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentTaskId = null;
+                    await loadTasks();
+                    document.getElementById('taskDetailCard').style.display = 'none';
+                    document.getElementById('emptyStateCard').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('删除任务失败:', error);
+            }
+        }
+        
+        async function loadFollowRecords() {
+            if (!currentTaskId) return;
+            
+            const followDate = document.getElementById('followDate').value;
+            const searchText = document.getElementById('storeSearch').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            try {
+                const params = new URLSearchParams();
+                if (followDate) params.set('date', followDate);
+                
+                const response = await fetch(`/api/follow_records?task_id=${currentTaskId}&${params}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    let stores = result.data;
+                    
+                    if (searchText) {
+                        const search = searchText.toLowerCase();
+                        stores = stores.filter(s => 
+                            s.店编号.toLowerCase().includes(search) ||
+                            s.店简称.toLowerCase().includes(search)
+                        );
+                    }
+                    
+                    if (statusFilter === 'done') {
+                        stores = stores.filter(s => s.已跟进);
+                    } else if (statusFilter === 'pending') {
+                        stores = stores.filter(s => !s.已跟进);
+                    }
+                    
+                    renderFollowTable(stores);
+                    updateProgress(stores);
+                }
+            } catch (error) {
+                console.error('加载跟进记录失败:', error);
+            }
+        }
+        
+        function renderFollowTable(stores) {
+            if (sortField) {
+                stores.sort((a, b) => {
+                    let valA = a[sortField];
+                    let valB = b[sortField];
+                    if (typeof valA === 'string') {
+                        valA = valA.toLowerCase();
+                        valB = valB.toLowerCase();
+                    }
+                    if (sortDirection === 'asc') {
+                        return valA > valB ? 1 : -1;
+                    }
+                    return valA < valB ? 1 : -1;
+                });
+            }
+            
+            const tbodyHtml = stores.map(store => {
+                const reasonText = store.跟进原因 ? store.跟进原因.split(';').map(r => r.trim()).filter(r => r).map(r => `<span class="badge-custom" style="background: #e9ecef; color: #495057; margin-right: 4px;">${r}</span>`).join('') : '-';
+                
+                return `
+                    <tr class="${store.已跟进 ? 'table-success' : ''}">
+                        <td>
+                            <input type="checkbox" class="form-check-input" data-store-code="${store.店编号}" onchange="updateSelectedCount()">
+                        </td>
+                        <td class="fw-semibold">${store.店编号}</td>
+                        <td>${store.店简称}</td>
+                        <td>${store.大区}</td>
+                        <td class="fw-semibold">${store.线索量本地}</td>
+                        <td class="fw-semibold">${store.到店数}</td>
+                        <td>
+                            <span class="fw-semibold" style="color: ${parseFloat(store.到店率) < 2 ? '#dc3545' : '#198754'}">
+                                ${store.到店率}%
+                            </span>
+                        </td>
+                        <td>${reasonText}</td>
+                        <td>
+                            ${store.已跟进 ? 
+                                `<span class="badge-custom badge-done"><i class="bi bi-check-circle me-1"></i>已跟进</span>` : 
+                                `<span class="badge-custom badge-pending"><i class="bi bi-clock me-1"></i>待跟进</span>`
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm me-1" onclick="showFollowReason('${store.店编号}', '${store.店简称}', '${store.大区}', ${store.线索量本地}, ${store.到店数}, ${store.到店率})">
+                                <i class="bi bi-sticky"></i> ${store.已跟进 ? '编辑' : '跟进'}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('followTableBody').innerHTML = tbodyHtml;
+        }
+        
+        function updateProgress(stores) {
+            const completed = stores.filter(s => s.已跟进).length;
+            const total = stores.length;
+            const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+            
+            document.getElementById('progressPercent').textContent = percent + '%';
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('completedCount').textContent = completed;
+            document.getElementById('pendingCount').textContent = total - completed;
+        }
+        
+        function filterStores() {
+            loadFollowRecords();
+        }
+        
+        function toggleSelectAll() {
+            const checked = document.getElementById('selectAll').checked;
+            document.querySelectorAll('#followTableBody input[type="checkbox"]').forEach(cb => cb.checked = checked);
+        }
+        
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('#followTableBody input[type="checkbox"]:checked').length;
+        }
+        
+        async function showStoreSelectModal() {
+            await loadBaseDates();
+            await loadStoreStats();
+            selectedStores = new Set(taskStores.map(s => s.店编号));
+            storeSelectModal.show();
+        }
+        
+        async function loadBaseDates() {
+            try {
+                const response = await fetch('/api/dates');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const selectHtml = ['<option value="">-- 请选择日期 --</option>'].concat(
+                        result.data.map(d => `<option value="${d.date}">${d.date}</option>`)
+                    ).join('');
+                    document.getElementById('baseDateSelect').innerHTML = selectHtml;
+                    
+                    if (result.data.length > 0) {
+                        document.getElementById('baseDateSelect').value = result.data[0].date;
+                    }
+                }
+            } catch (error) {
+                console.error('加载日期失败:', error);
+            }
+        }
+        
+        async function loadStoreStats() {
+            const baseDate = document.getElementById('baseDateSelect').value;
+            if (!baseDate) return;
+            
+            try {
+                const response = await fetch(`/api/stores?date=${baseDate}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    storeStatsData = result.data;
+                    renderStoreSelectTable();
+                }
+            } catch (error) {
+                console.error('加载门店数据失败:', error);
+            }
+        }
+        
+        function sortModalTable(field) {
+            if (modalSortField === field) {
+                modalSortDirection = modalSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                modalSortField = field;
+                modalSortDirection = 'desc'; // 默认降序
+            }
+            
+            // 更新所有排序图标
+            ['线索量本地', '到店数', '到店率'].forEach(f => {
+                const icon = document.getElementById(`sort-icon-${f}`);
+                if (icon) {
+                    if (f === modalSortField) {
+                        icon.className = modalSortDirection === 'asc' ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+                    } else {
+                        icon.className = 'bi bi-chevron-expand';
+                    }
+                }
+            });
+            
+            renderStoreSelectTable();
+        }
+        
+        function renderStoreSelectTable() {
+            const searchText = document.getElementById('modalStoreSearch').value.toLowerCase();
+            let filtered = storeStatsData;
+            
+            if (searchText) {
+                filtered = storeStatsData.filter(s =>
+                    s.店编号.toLowerCase().includes(searchText) ||
+                    s.店简称.toLowerCase().includes(searchText)
+                );
+            }
+            
+            if (modalSortField) {
+                filtered.sort((a, b) => {
+                    let valA = a[modalSortField];
+                    let valB = b[modalSortField];
+                    
+                    // 对于数值类型进行数值比较
+                    if (modalSortField === '线索量本地' || modalSortField === '到店数') {
+                        valA = Number(valA) || 0;
+                        valB = Number(valB) || 0;
+                    } else if (modalSortField === '到店率') {
+                        valA = parseFloat(valA) || 0;
+                        valB = parseFloat(valB) || 0;
+                    }
+                    
+                    if (modalSortDirection === 'asc') {
+                        return valA > valB ? 1 : -1;
+                    }
+                    return valA < valB ? 1 : -1;
+                });
+            }
+            
+            const tbodyHtml = filtered.map(store => {
+                const isSelected = selectedStores.has(store.店编号);
+                return `
+                    <tr class="${isSelected ? 'table-primary' : ''}">
+                        <td>
+                            <input type="checkbox" class="form-check-input" 
+                                ${isSelected ? 'checked' : ''} 
+                                data-store-code="${store.店编号}"
+                                onchange="toggleStoreSelection('${store.店编号}')">
+                        </td>
+                        <td class="fw-semibold">${store.店编号}</td>
+                        <td>${store.店简称}</td>
+                        <td>${store.大区}</td>
+                        <td class="fw-semibold">${store.线索量本地}</td>
+                        <td class="fw-semibold">${store.到店数}</td>
+                        <td>
+                            <span class="fw-semibold" style="color: ${parseFloat(store.到店率) < 2 ? '#dc3545' : '#198754'}">
+                                ${store.到店率}%
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('storeSelectTableBody').innerHTML = tbodyHtml;
+            updateModalSelectedCount();
+        }
+        
+        function toggleStoreSelection(storeCode) {
+            if (selectedStores.has(storeCode)) {
+                selectedStores.delete(storeCode);
+            } else {
+                selectedStores.add(storeCode);
+            }
+            renderStoreSelectTable();
+        }
+        
+        function filterModalStores() {
+            renderStoreSelectTable();
+        }
+        
+        function toggleModalSelectAll() {
+            const checked = document.getElementById('selectAllModal').checked;
+            const searchText = document.getElementById('modalStoreSearch').value.toLowerCase();
+            let filtered = storeStatsData;
+            
+            if (searchText) {
+                filtered = storeStatsData.filter(s =>
+                    s.店编号.toLowerCase().includes(searchText) ||
+                    s.店简称.toLowerCase().includes(searchText)
+                );
+            }
+            
+            if (checked) {
+                filtered.forEach(s => selectedStores.add(s.店编号));
+            } else {
+                filtered.forEach(s => selectedStores.delete(s.店编号));
+            }
+            renderStoreSelectTable();
+        }
+        
+        function updateModalSelectedCount() {
+            const count = selectedStores.size;
+            document.getElementById('selectedCount').textContent = `已选: ${count}`;
+            document.getElementById('confirmCount').textContent = count;
+        }
+        
+        async function confirmStoreSelection() {
+            if (selectedStores.size === 0) {
+                alert('请至少选择一家门店');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/follow_tasks/${currentTaskId}/stores`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ storeCodes: Array.from(selectedStores) })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    storeSelectModal.hide();
+                    await selectTask(currentTaskId);
+                }
+            } catch (error) {
+                console.error('保存门店失败:', error);
+            }
+        }
+        
+        async function loadFollowReasons() {
+            try {
+                const response = await fetch('/api/follow_reasons');
+                const result = await response.json();
+                
+                if (result.success) {
+                    followReasons = result.data;
+                    renderReasonConfigList();
+                }
+            } catch (error) {
+                console.error('加载跟进原因失败:', error);
+            }
+        }
+        
+        function renderReasonConfigList() {
+            let html = '';
+            
+            followReasons.filter(r => !r.父级ID).forEach(parent => {
+                const parentId = parent.配置ID || parent.id;
+                const parentName = parent.原因选项 || parent.原因 || '未知';
+                html += `
+                    <div class="reason-item parent">
+                        <span class="reason-text">
+                            <i class="bi bi-folder2 me-2"></i>${parentName}
+                        </span>
+                        <div class="reason-actions">
+                            <button class="btn btn-outline-light btn-sm" onclick="deleteFollowReason(${parentId})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                followReasons.filter(r => r.父级ID === parentId).forEach(child => {
+                    const childId = child.配置ID || child.id;
+                    const childName = child.原因选项 || child.原因 || '未知';
+                    html += `
+                        <div class="reason-item child">
+                            <span class="reason-text">
+                                <i class="bi bi-file-earmark me-2"></i>${childName}
+                            </span>
+                            <div class="reason-actions">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="deleteFollowReason(${childId})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+            
+            document.getElementById('reasonConfigList').innerHTML = html;
+        }
+        
+        function showAddReasonModal() {
+            document.getElementById('reasonTypeSelect').value = 'parent';
+            document.getElementById('parentReasonSelect').disabled = true;
+            document.getElementById('newReasonText').value = '';
+            
+            const parentHtml = ['<option value="0">-- 请选择父分类 --</option>'].concat(
+                followReasons.filter(r => !r.父级ID).map(r => `<option value="${r.id}">${r.原因}</option>`)
+            ).join('');
+            document.getElementById('parentReasonSelect').innerHTML = parentHtml;
+            
+            addReasonModal.show();
+        }
+        
+        function toggleParentSelect() {
+            const type = document.getElementById('reasonTypeSelect').value;
+            document.getElementById('parentReasonSelect').disabled = type === 'parent';
+        }
+        
+        async function addFollowReason() {
+            const reasonText = document.getElementById('newReasonText').value.trim();
+            const reasonType = document.getElementById('reasonTypeSelect').value;
+            const parentId = document.getElementById('parentReasonSelect').value;
+            
+            if (!reasonText) {
+                alert('请输入原因选项');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/follow_reason', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reason: reasonText,
+                        parentId: reasonType === 'child' ? parseInt(parentId) : null
+                    })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addReasonModal.hide();
+                    await loadFollowReasons();
+                }
+            } catch (error) {
+                console.error('添加原因失败:', error);
+            }
+        }
+        
+        async function deleteFollowReason(reasonId) {
+            if (!confirm('确定要删除此原因吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/follow_reason/${reasonId}`, { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadFollowReasons();
+                }
+            } catch (error) {
+                console.error('删除原因失败:', error);
+            }
+        }
+        
+        let selectedReasonOptions = [];
+        
+        function showFollowReason(storeCode, storeName, region, clueCount, arrivalCount, arrivalRate) {
+            selectedReasonOptions = [];
+            
+            document.getElementById('followRecordId').value = '';
+            document.getElementById('modalStoreCode').textContent = storeCode;
+            document.getElementById('modalStoreName').textContent = storeName;
+            document.getElementById('modalRegion').textContent = region;
+            document.getElementById('modalClueCount').textContent = clueCount;
+            document.getElementById('modalArrivalCount').textContent = arrivalCount;
+            document.getElementById('modalArrivalRate').textContent = arrivalRate + '%';
+            document.getElementById('reasonRemark').value = '';
+            
+            let reasonsHtml = '';
+            followReasons.filter(r => !r.父级ID).forEach(parent => {
+                const children = followReasons.filter(r => r.父级ID === parent.id);
+                if (children.length > 0) {
+                    reasonsHtml += `
+                        <div class="mb-3">
+                            <h6 class="fw-semibold text-primary mb-2"><i class="bi bi-folder2 me-2"></i>${parent.原因}</h6>
+                            <div class="row g-2">
+                                ${children.map(child => `
+                                    <div class="col-md-4">
+                                        <button type="button" class="btn w-100 reason-option" 
+                                            data-reason-id="${child.id}" 
+                                            data-reason-text="${parent.原因}/${child.原因}"
+                                            style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 10px; padding: 12px; text-align: left;"
+                                            onclick="toggleReasonOption(this)">
+                                            <i class="bi bi-square me-2"></i>${child.原因}
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            
+            document.getElementById('reasonOptions').innerHTML = reasonsHtml;
+            document.getElementById('historyRecords').innerHTML = '<div class="card-body text-center text-muted py-4">点击刷新查看历史记录</div>';
+            
+            const store = taskStores.find(s => s.店编号 === storeCode);
+            if (store && store.跟进记录ID) {
+                document.getElementById('followRecordId').value = store.跟进记录ID;
+                document.getElementById('reasonRemark').value = store.备注 || '';
+                
+                const reasons = store.跟进原因 ? store.跟进原因.split(';').map(r => r.trim()).filter(r => r) : [];
+                reasons.forEach(r => {
+                    const btn = document.querySelector(`.reason-option[data-reason-text="${r}"]`);
+                    if (btn) {
+                        toggleReasonOption(btn);
+                    }
+                });
+            }
+            
+            followReasonModal.show();
+        }
+        
+        function toggleReasonOption(btn) {
+            const reasonId = parseInt(btn.dataset.reasonId);
+            const reasonText = btn.dataset.reasonText;
+            
+            if (selectedReasonOptions.includes(reasonText)) {
+                selectedReasonOptions = selectedReasonOptions.filter(r => r !== reasonText);
+                btn.style.background = '#f8f9fa';
+                btn.style.borderColor = '#e9ecef';
+                btn.innerHTML = `<i class="bi bi-square me-2"></i>${reasonText.split('/').pop()}`;
+            } else {
+                selectedReasonOptions.push(reasonText);
+                btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                btn.style.borderColor = '#667eea';
+                btn.style.color = 'white';
+                btn.innerHTML = `<i class="bi bi-check-square me-2"></i>${reasonText.split('/').pop()}`;
+            }
+        }
+        
+        async function loadHistoryRecords() {
+            const storeCode = document.getElementById('modalStoreCode').textContent;
+            if (!currentTaskId || !storeCode) return;
+            
+            try {
+                const response = await fetch(`/api/follow_tasks/${currentTaskId}/store/${storeCode}/history`);
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    const html = result.data.map(record => `
+                        <div class="card mb-2" style="border: none; background: white; border-radius: 10px;">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold text-primary"><i class="bi bi-calendar me-1"></i>${record.跟进日期}</span>
+                                    <span class="text-muted small">${record.操作人} 操作</span>
+                                </div>
+                                <div class="mb-2">
+                                    ${record.跟进原因.split(';').map(r => `<span class="badge-custom" style="background: #e9ecef; color: #495057; margin-right: 4px;">${r}</span>`).join('')}
+                                </div>
+                                ${record.备注 ? `<div class="text-muted small"><i class="bi bi-chat-dots me-1"></i>${record.备注}</div>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                    document.getElementById('historyRecords').innerHTML = html;
+                } else {
+                    document.getElementById('historyRecords').innerHTML = '<div class="card-body text-center text-muted py-4">暂无历史记录</div>';
+                }
+            } catch (error) {
+                console.error('加载历史记录失败:', error);
+            }
+        }
+        
+        async function saveFollowReason() {
+            const followDate = document.getElementById('followDate').value;
+            if (!followDate) {
+                alert('请选择跟进日期');
+                return;
+            }
+            
+            if (selectedReasonOptions.length === 0) {
+                alert('请至少选择一个跟进原因');
+                return;
+            }
+            
+            const recordId = document.getElementById('followRecordId').value;
+            const storeCode = document.getElementById('modalStoreCode').textContent;
+            const reasonText = selectedReasonOptions.join('; ');
+            const remark = document.getElementById('reasonRemark').value.trim();
+            
+            try {
+                const method = recordId ? 'PUT' : 'POST';
+                const url = recordId ? `/api/follow_record/${recordId}` : '/api/follow_record';
+                
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        taskId: currentTaskId,
+                        storeCode,
+                        date: followDate,
+                        reason: reasonText,
+                        remark,
+                        operator: currentUser
+                    })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    followReasonModal.hide();
+                    await loadFollowRecords();
+                }
+            } catch (error) {
+                console.error('保存跟进记录失败:', error);
+            }
+        }
+        
+        async function generateWeeklyReport() {
+            if (!currentTaskId) return;
+            
+            try {
+                const response = await fetch(`/api/follow_tasks/${currentTaskId}/report`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('weeklyReport').value = result.data;
+                    document.getElementById('reportCard').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('生成报告失败:', error);
+            }
+        }
+        
+        function copyReport() {
+            const textarea = document.getElementById('weeklyReport');
+            textarea.select();
+            document.execCommand('copy');
+            alert('报告已复制到剪贴板');
+        }
+    </script>
 </body>
 </html>

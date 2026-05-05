@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>门店档案</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .container { max-width: 1600px; margin-top: 20px; }
+        .card { margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .card-header { background-color: #f8f9fa; font-weight: 600; }
+        .user-dropdown { min-width: 200px; }
+        .nav-pills .nav-link.active { background-color: #0d6efd; }
+        .nav-pills .nav-link { color: #495057; }
+        .search-box { position: relative; }
+        .search-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .search-suggestions.show { display: block; }
+        .search-suggestion-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .search-suggestion-item:hover { background-color: #f8f9fa; }
+        .search-suggestion-item:last-child { border-bottom: none; }
+        .stat-card {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .stat-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-value { font-size: 2rem; font-weight: 700; }
+        .stat-label { font-size: 0.85rem; opacity: 0.9; }
+        .table-responsive { font-size: 0.9rem; }
+        .sortable { cursor: pointer; user-select: none; }
+        .sortable:hover { background-color: #e9ecef; }
+        .sort-icon { margin-left: 5px; opacity: 0.5; }
+        .sort-active .sort-icon { opacity: 1; color: #0d6efd; }
+        .selected-row { background-color: #d1e7dd !important; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #6c757d; }
+        .empty-state i { font-size: 4rem; opacity: 0.3; }
+        .pagination-controls { display: flex; justify-content: space-between; align-items: center; }
+        .sidebar { position: sticky; top: 20px; }
+        .badge-followed { background-color: #10b981; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center">
+                <a class="navbar-brand me-3" href="/">
+                    <i class="bi bi-shop"></i> 异常店治理工具
+                </a>
+                <ul class="nav nav-pills nav-fill">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/" style="color: rgba(255,255,255,0.85);">
+                            <i class="bi bi-house"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/daily_import" style="color: rgba(255,255,255,0.85);">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> 日报导入
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/follow_up" style="color: rgba(255,255,255,0.85);">
+                            <i class="bi bi-clipboard-check"></i> 门店跟进治理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/store_profile" style="color: white;">
+                            <i class="bi bi-file-person"></i> 门店档案
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="d-flex align-items-center">
+                <a href="/operation_logs" class="btn btn-outline-light btn-sm me-3">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+                <div class="dropdown">
+                    <button class="btn btn-outline-light dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle"></i>
+                        <span id="currentUserName">未登录</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end user-dropdown">
+                        <li><h6 class="dropdown-header">切换用户</h6></li>
+                        <div id="userList"></div>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                                <i class="bi bi-person-plus"></i> 添加新用户
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">首页</a></li>
+                <li class="breadcrumb-item active">门店档案</li>
+            </ol>
+        </nav>
+        
+        <div class="row">
+            <div class="col-md-3 sidebar">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-search"></i> 门店筛选
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">搜索门店</label>
+                            <input type="text" class="form-control" id="storeSearchInput" placeholder="输入店编号或店简称...">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">大区筛选</label>
+                            <select class="form-select" id="regionFilter">
+                                <option value="">全部大区</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">战区筛选</label>
+                            <select class="form-select" id="warZoneFilter">
+                                <option value="">全部战区</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">跟进状态</label>
+                            <select class="form-select" id="followStatusFilter">
+                                <option value="">全部</option>
+                                <option value="followed">已跟进</option>
+                                <option value="unfollowed">未跟进</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="applyFilters()">
+                            <i class="bi bi-filter"></i> 应用筛选
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-9">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-calendar-range"></i> 时间段筛选
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label">开始日期</label>
+                                <input type="date" class="form-control" id="startDate">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">结束日期</label>
+                                <input type="date" class="form-control" id="endDate">
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-primary w-100" onclick="setDateRange(30)">近30天</button>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-primary w-100" onclick="setDateRange(7)">近7天</button>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-primary w-100" onclick="loadStoreList()">
+                                    <i class="bi bi-search"></i> 查询
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-graph-up-arrow"></i> 跟进汇总统计
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value" id="totalStores">0</div>
+                                    <div class="stat-label">总跟进门店数</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="stat-card green">
+                                    <div class="stat-value" id="totalRecords">0</div>
+                                    <div class="stat-label">总跟进记录数</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="stat-card orange">
+                                    <div class="stat-value" id="avgFollows">0</div>
+                                    <div class="stat-label">平均跟进次数</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="stat-card blue">
+                                    <div class="stat-value" id="highFreqStores">0</div>
+                                    <div class="stat-label">高频门店数</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-table"></i> 门店列表
+                        </div>
+                        <div class="text-muted small">
+                            共 <span id="totalCount">0</span> 家门店
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="sortable" data-sort="店编号">店编号 <i class="bi bi-chevron-expand sort-icon"></i></th>
+                                        <th class="sortable" data-sort="店简称">店简称 <i class="bi bi-chevron-expand sort-icon"></i></th>
+                                        <th class="sortable" data-sort="大区">大区 <i class="bi bi-chevron-expand sort-icon"></i></th>
+                                        <th class="sortable" data-sort="战区">战区 <i class="bi bi-chevron-expand sort-icon"></i></th>
+                                        <th class="sortable" data-sort="平均线索量">平均线索量 <i class="bi bi-chevron-expand sort-icon"></i></th>
+                                        <th class="sortable" data-sort="平均到店数">平均到店数 <i class="bi bi-chevron-expand sort-icon"></i></th>
+                                        <th class="sortable" data-sort="平均到店率">平均到店率 <i class="bi bi-chevron-expand sort-icon"></i></th>
+                                        <th>是否跟进</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="storeListTable"></tbody>
+                            </table>
+                        </div>
+                        <div class="pagination-controls">
+                            <div class="pagination-info">
+                                第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
+                            </div>
+                            <div class="pagination-controls-inner">
+                                <button class="btn btn-sm btn-outline-secondary" id="prevPage" onclick="changePage(-1)" disabled>
+                                    <i class="bi bi-chevron-left"></i> 上一页
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="nextPage" onclick="changePage(1)" disabled>
+                                    下一页 <i class="bi bi-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加新用户</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" id="newUsername" placeholder="输入用户名">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="addNewUser()">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentUser = localStorage.getItem('currentUser') || '';
+        let currentPage = 1;
+        let pageSize = 20;
+        let sortField = null;
+        let sortDirection = 'asc';
+        let storeListData = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUsers();
+            loadFollowSummary();
+            loadRegions();
+            loadWarZones('');
+            initDateInputs();
+            loadStoreList();
+
+            if (!currentUser) {
+                showLoginPrompt();
+            }
+
+            document.querySelectorAll('.sortable').forEach(th => {
+                th.addEventListener('click', function() {
+                    const field = this.dataset.sort;
+                    if (sortField === field) {
+                        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        sortField = field;
+                        sortDirection = 'asc';
+                    }
+                    updateSortIcons();
+                    renderStoreList();
+                });
+            });
+        });
+
+        function bindRegionWarZoneEvents() {
+            const regionFilter = document.getElementById('regionFilter');
+            const warZoneFilter = document.getElementById('warZoneFilter');
+            
+            if (regionFilter && !regionFilter.hasAttribute('data-event-bound')) {
+                regionFilter.setAttribute('data-event-bound', 'true');
+                regionFilter.addEventListener('change', function() {
+                    loadWarZones(this.value);
+                    warZoneFilter.value = '';
+                    loadStoreList();
+                });
+            }
+            
+            if (warZoneFilter && !warZoneFilter.hasAttribute('data-event-bound')) {
+                warZoneFilter.setAttribute('data-event-bound', 'true');
+                warZoneFilter.addEventListener('change', function() {
+                    loadStoreList();
+                });
+            }
+        }
+
+        function initDateInputs() {
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            document.getElementById('endDate').value = formatDateInput(today);
+            document.getElementById('startDate').value = formatDateInput(thirtyDaysAgo);
+        }
+
+        function formatDateInput(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function setDateRange(days) {
+            const today = new Date();
+            const startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - days);
+
+            document.getElementById('startDate').value = formatDateInput(startDate);
+            document.getElementById('endDate').value = formatDateInput(today);
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users');
+                const result = await response.json();
+
+                if (result.success) {
+                    const userListEl = document.getElementById('userList');
+                    userListEl.innerHTML = '';
+
+                    result.data.forEach(user => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<a class="dropdown-item ${user.用户名 === currentUser ? 'active' : ''}" href="#" onclick="switchUser('${user.用户名}')">${user.用户名}</a>`;
+                        userListEl.appendChild(li);
+                    });
+
+                    updateUserDisplay();
+                }
+            } catch (error) {
+                console.error('加载用户列表失败:', error);
+            }
+        }
+
+        function updateUserDisplay() {
+            document.getElementById('currentUserName').textContent = currentUser || '未登录';
+        }
+
+        async function switchUser(username) {
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 用户名: username })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    currentUser = username;
+                    localStorage.setItem('currentUser', username);
+                    updateUserDisplay();
+                    await loadUsers();
+                }
+            } catch (error) {
+                console.error('切换用户失败:', error);
+            }
+        }
+
+        async function addNewUser() {
+            const username = document.getElementById('newUsername').value.trim();
+            if (!username) {
+                alert('请输入用户名');
+                return;
+            }
+
+            await switchUser(username);
+            bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+            document.getElementById('newUsername').value = '';
+        }
+
+        function showLoginPrompt() {
+            const username = prompt('请输入您的用户名：');
+            if (username && username.trim()) {
+                switchUser(username.trim());
+            }
+        }
+
+        async function logOperation(operationType, details) {
+            if (!currentUser) return;
+
+            try {
+                await fetch('/api/operation_logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        用户名: currentUser,
+                        操作页面: '门店档案',
+                        操作类型: operationType,
+                        操作详情: details
+                    })
+                });
+            } catch (error) {
+                console.error('记录日志失败:', error);
+            }
+        }
+
+        async function loadFollowSummary() {
+            try {
+                const response = await fetch('/api/store_profile/follow_summary');
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+                    document.getElementById('totalStores').textContent = data.total_stores || 0;
+                    document.getElementById('totalRecords').textContent = data.total_records || 0;
+                    document.getElementById('avgFollows').textContent = (data.avg_times || 0).toFixed(2);
+                    document.getElementById('highFreqStores').textContent = data.high_freq_stores || 0;
+                }
+            } catch (error) {
+                console.error('加载跟进汇总失败:', error);
+            }
+        }
+
+        async function loadRegions() {
+            try {
+                const response = await fetch('/api/store_profile/regions');
+                const result = await response.json();
+
+                if (result.success) {
+                    const regions = result.data.regions || [];
+                    const regionFilter = document.getElementById('regionFilter');
+                    regionFilter.innerHTML = '<option value="">全部大区</option>' +
+                        regions.map(r => `<option value="${r}">${r}</option>`).join('');
+                    bindRegionWarZoneEvents();
+                }
+            } catch (error) {
+                console.error('加载大区失败:', error);
+            }
+        }
+
+        async function loadWarZones(region) {
+            try {
+                const response = await fetch(`/api/store_profile/war_zones?region=${encodeURIComponent(region || '')}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const warZones = result.data.war_zones || [];
+                    const warZoneFilter = document.getElementById('warZoneFilter');
+                    warZoneFilter.innerHTML = '<option value="">全部战区</option>' +
+                        warZones.map(w => `<option value="${w}">${w}</option>`).join('');
+                    bindRegionWarZoneEvents();
+                }
+            } catch (error) {
+                console.error('加载战区失败:', error);
+            }
+        }
+
+        async function loadStoreList() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const region = document.getElementById('regionFilter').value;
+            const warZone = document.getElementById('warZoneFilter').value;
+            const searchText = document.getElementById('storeSearchInput').value;
+            const followStatus = document.getElementById('followStatusFilter').value;
+
+            try {
+                const url = new URL('/api/store_profile/store_list', window.location.origin);
+                url.searchParams.set('start_date', startDate);
+                url.searchParams.set('end_date', endDate);
+                url.searchParams.set('region', region);
+                url.searchParams.set('war_zone', warZone);
+                url.searchParams.set('search', searchText);
+                url.searchParams.set('follow_status', followStatus);
+                url.searchParams.set('page', currentPage);
+                url.searchParams.set('page_size', pageSize);
+
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (result.success) {
+                    storeListData = result.data.list || [];
+                    updatePagination(result.data.pagination);
+                    renderStoreList();
+                }
+            } catch (error) {
+                console.error('加载门店列表失败:', error);
+            }
+        }
+
+        function applyFilters() {
+            loadStoreList();
+        }
+
+        function renderStoreList() {
+            let filteredData = [...storeListData];
+
+            if (sortField) {
+                filteredData.sort((a, b) => {
+                    let valA = a[sortField];
+                    let valB = b[sortField];
+                    if (typeof valA === 'string') {
+                        valA = valA.toLowerCase();
+                        valB = valB.toLowerCase();
+                    }
+                    return sortDirection === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+                });
+            }
+
+            const tbody = document.getElementById('storeListTable');
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5">暂无符合条件的门店</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filteredData.map(store => `
+                <tr>
+                    <td>${store.店编号}</td>
+                    <td>${store.店简称}</td>
+                    <td>${store.大区 || '-'}</td>
+                    <td>${store.战区 || '-'}</td>
+                    <td>${store.平均线索量 || 0}</td>
+                    <td>${store.平均到店数 || 0}</td>
+                    <td>${(store.平均到店率 || 0).toFixed(1)}%</td>
+                    <td><span class="badge ${store.是否跟进 ? 'badge-followed' : 'bg-secondary'}">${store.是否跟进 ? '已跟进' : '未跟进'}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="viewStoreDetail('${store.店编号}', '${store.店简称}')">
+                            <i class="bi bi-eye"></i> 查看详情
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function viewStoreDetail(storeCode, storeName) {
+            window.location.href = `/store_detail/${storeCode}?name=${encodeURIComponent(storeName)}`;
+        }
+
+        function updatePagination(pagination) {
+            const total = pagination.total || 0;
+            const totalPages = pagination.total_pages || 1;
+
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('currentPage').textContent = currentPage;
+            document.getElementById('totalPages').textContent = totalPages;
+
+            document.getElementById('prevPage').disabled = currentPage <= 1;
+            document.getElementById('nextPage').disabled = currentPage >= totalPages;
+        }
+
+        function changePage(delta) {
+            const totalPages = parseInt(document.getElementById('totalPages').textContent);
+            currentPage = Math.max(1, Math.min(currentPage + delta, totalPages));
+            document.getElementById('currentPage').textContent = currentPage;
+
+            document.getElementById('prevPage').disabled = currentPage <= 1;
+            document.getElementById('nextPage').disabled = currentPage >= totalPages;
+
+            loadStoreList();
+        }
+
+        function updateSortIcons() {
+            document.querySelectorAll('.sortable').forEach(th => {
+                const icon = th.querySelector('.sort-icon');
+                if (th.dataset.sort === sortField) {
+                    th.classList.add('sort-active');
+                    icon.className = sortDirection === 'asc' ? 'bi bi-chevron-up sort-icon' : 'bi bi-chevron-down sort-icon';
+                } else {
+                    th.classList.remove('sort-active');
+                    icon.className = 'bi bi-chevron-expand sort-icon';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

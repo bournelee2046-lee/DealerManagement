@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>门店档案页面设计方案</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; }
+        .section-title { 
+            border-left: 4px solid #0d6efd; 
+            padding-left: 12px; 
+            margin-bottom: 20px;
+        }
+        .card-title { font-size: 1.1rem; font-weight: 600; }
+        .layout-card { 
+            border: 2px dashed #dee2e6; 
+            background: #fff;
+        }
+        .layout-header { 
+            background: #e7f1ff; 
+            padding: 10px 15px;
+            border-bottom: 2px dashed #dee2e6;
+        }
+        .layout-sidebar {
+            border-right: 2px dashed #dee2e6;
+            min-height: 500px;
+        }
+        .mockup-table th {
+            background: #f8f9fa;
+        }
+        .badge-followed {
+            background: #10b981;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .stat-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-value { font-size: 2rem; font-weight: 700; }
+    </style>
+</head>
+<body class="py-4">
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2><i class="bi bi-shop-window"></i> 门店档案页面重新设计方案</h2>
+                <p class="text-muted">基于您的需求：查询所有门店历史数据 + 筛选时间段 + 查看近30天指标 + 跟进表现为其中一部分</p>
+            </div>
+        </div>
+
+        <!-- 整体布局 -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-layout-three-columns"></i> 整体页面布局</h5>
+            </div>
+            <div class="card-body">
+                <div class="layout-card">
+                    <div class="layout-header">
+                        <div class="row">
+                            <div class="col-md-3"><strong>左侧：门店筛选区</strong></div>
+                            <div class="col-md-9"><strong>右侧：汇总数据 + 门店列表</strong></div>
+                        </div>
+                    </div>
+                    <div class="row g-0">
+                        <div class="col-md-3 layout-sidebar p-3">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-search"></i> 搜索门店</label>
+                                <input type="text" class="form-control" placeholder="输入店编号或店简称">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-map"></i> 大区筛选</label>
+                                <select class="form-select">
+                                    <option>全部大区</option>
+                                    <option>华北大区</option>
+                                    <option>华东大区</option>
+                                    <option>华南大区</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-geo-alt"></i> 战区筛选</label>
+                                <select class="form-select">
+                                    <option>全部战区</option>
+                                </select>
+                            </div>
+                            <hr>
+                            <div class="text-muted small">
+                                <strong>说明：</strong>此区域支持筛选所有门店，左侧实时显示筛选结果
+                            </div>
+                        </div>
+                        <div class="col-md-9 p-3">
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3"><i class="bi bi-calendar-range"></i> 时间段筛选</h6>
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-md-3">
+                                                    <label class="form-label">开始日期</label>
+                                                    <input type="date" class="form-control" value="2026-04-01">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">结束日期</label>
+                                                    <input type="date" class="form-control" value="2026-05-05">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <button class="btn btn-outline-primary w-100">近30天</button>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <button class="btn btn-outline-primary w-100">近7天</button>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <button class="btn btn-primary w-100">查询</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <h6 class="fw-bold"><i class="bi bi-graph-up-arrow"></i> 跟进汇总统计</h6>
+                                    <div class="row g-2">
+                                        <div class="col-md-3">
+                                            <div class="stat-card">
+                                                <div class="stat-value">125</div>
+                                                <div class="stat-label">总跟进门店数</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="stat-card green">
+                                                <div class="stat-value">856</div>
+                                                <div class="stat-label">总跟进记录数</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="stat-card orange">
+                                                <div class="stat-value">6.85</div>
+                                                <div class="stat-label">平均跟进次数</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="stat-card blue">
+                                                <div class="stat-value">28</div>
+                                                <div class="stat-label">高频门店数</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <h6 class="fw-bold"><i class="bi bi-table"></i> 门店列表 <span class="text-muted fw-normal small">（共 1245 家门店）</span></h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover mockup-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>店编号</th>
+                                                    <th>店简称</th>
+                                                    <th>大区</th>
+                                                    <th>战区</th>
+                                                    <th>平均线索量</th>
+                                                    <th>平均到店数</th>
+                                                    <th>平均到店率</th>
+                                                    <th>是否跟进</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>BD1234</td>
+                                                    <td>北京朝阳店</td>
+                                                    <td>华北大区</td>
+                                                    <td>北京战区</td>
+                                                    <td>156</td>
+                                                    <td>28</td>
+                                                    <td>17.9%</td>
+                                                    <td><span class="badge badge-followed">已跟进</span></td>
+                                                    <td><button class="btn btn-sm btn-primary">查看详情</button></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>SH5678</td>
+                                                    <td>上海徐汇店</td>
+                                                    <td>华东大区</td>
+                                                    <td>上海战区</td>
+                                                    <td>203</td>
+                                                    <td>45</td>
+                                                    <td>22.2%</td>
+                                                    <td><span class="badge bg-secondary">未跟进</span></td>
+                                                    <td><button class="btn btn-sm btn-primary">查看详情</button></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>GZ9012</td>
+                                                    <td>广州天河店</td>
+                                                    <td>华南大区</td>
+                                                    <td>广州战区</td>
+                                                    <td>178</td>
+                                                    <td>32</td>
+                                                    <td>18.0%</td>
+                                                    <td><span class="badge badge-followed">已跟进</span></td>
+                                                    <td><button class="btn btn-sm btn-primary">查看详情</button></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                    <td>...</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="text-muted">共 1245 条，第 1 页 / 共 125 页</span>
+                                        <div>
+                                            <button class="btn btn-outline-secondary btn-sm me-1">上一页</button>
+                                            <button class="btn btn-primary btn-sm me-1">1</button>
+                                            <button class="btn btn-outline-secondary btn-sm me-1">2</button>
+                                            <button class="btn btn-outline-secondary btn-sm me-1">3</button>
+                                            <button class="btn btn-outline-secondary btn-sm">下一页</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 门店详情页 -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-shop"></i> 门店详情页（单独页面）</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6 class="fw-bold">北京朝阳店（BD1234）</h6>
+                        <span class="badge bg-secondary">华北大区</span>
+                        <span class="badge bg-secondary">北京战区</span>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label">开始日期</label>
+                                        <input type="date" class="form-control" value="2026-04-01">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">结束日期</label>
+                                        <input type="date" class="form-control" value="2026-05-05">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="btn btn-outline-success w-100">近30天</button>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="btn btn-outline-success w-100">近7天</button>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="btn btn-success w-100">查询</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-graph-up"></i> 近30天指标推移</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center py-4 text-muted">
+                                    <i class="bi bi-bar-chart-line" style="font-size: 3rem;"></i>
+                                    <p class="mt-2">折线图显示：线索量、到店数、到店率三条线</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-calculator"></i> 周期内数据摘要</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="p-2 border rounded">
+                                            <div class="text-muted small">周期内线索增量</div>
+                                            <div class="fs-5 fw-bold text-success">+35</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="p-2 border rounded">
+                                            <div class="text-muted small">周期内到店增量</div>
+                                            <div class="fs-5 fw-bold text-success">+8</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="p-2 border rounded">
+                                            <div class="text-muted small">平均到店率</div>
+                                            <div class="fs-5 fw-bold">17.9%</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="p-2 border rounded">
+                                            <div class="text-muted small">数据天数</div>
+                                            <div class="fs-5 fw-bold">30天</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-clipboard-check"></i> 跟进历史记录</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="accordion" id="followHistory">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#task1">
+                                                <i class="bi bi-folder2 me-2"></i>任务 #2026-W17
+                                            </button>
+                                        </h2>
+                                        <div id="task1" class="accordion-collapse collapse">
+                                            <div class="accordion-body">
+                                                <div class="mb-2">
+                                                    <span class="badge bg-primary">2026-04-28</span>
+                                                    <span class="text-muted small ms-2">跟进人：李博闻</span>
+                                                </div>
+                                                <div class="mb-2"><strong>跟进原因：</strong>线索量问题/线索量下降，已联系店长</div>
+                                                <div><strong>备注：</strong>已沟通，店长表示正在调整投放策略</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#task2">
+                                                <i class="bi bi-folder2 me-2"></i>任务 #2026-W16
+                                            </button>
+                                        </h2>
+                                        <div id="task2" class="accordion-collapse show">
+                                            <div class="accordion-body">
+                                                <div class="mb-2">
+                                                    <span class="badge bg-primary">2026-04-21</span>
+                                                    <span class="text-muted small ms-2">跟进人：李博闻</span>
+                                                </div>
+                                                <div class="mb-2"><strong>跟进原因：</strong>门店配合度/门店不配合，已上报</div>
+                                                <div><strong>备注：</strong>已同步给大区经理</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-table"></i> 详细日报数据</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                    <table class="table table-sm">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th>日期</th>
+                                                <th>线索量</th>
+                                                <th>到店数</th>
+                                                <th>到店率</th>
+                                                <th>线索增量</th>
+                                                <th>到店增量</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>04-01</td>
+                                                <td>140</td>
+                                                <td>25</td>
+                                                <td>17.9%</td>
+                                                <td>-</td>
+                                                <td>-</td>
+                                            </tr>
+                                            <tr>
+                                                <td>04-02</td>
+                                                <td>145</td>
+                                                <td>28</td>
+                                                <td>19.3%</td>
+                                                <td class="text-success">+5</td>
+                                                <td class="text-success">+3</td>
+                                            </tr>
+                                            <tr>
+                                                <td>...</td>
+                                                <td>...</td>
+                                                <td>...</td>
+                                                <td>...</td>
+                                                <td>...</td>
+                                                <td>...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 设计要点 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightbulb"></i> 设计要点说明</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-check-circle-fill text-success"></i> 门店档案页面</h6>
+                        <ul>
+                            <li>左侧：门店筛选区（搜索 + 大区 + 战区）</li>
+                            <li>顶部：时间段筛选（支持快捷按钮：近30天、近7天）</li>
+                            <li>跟进汇总统计：保持类似当前页面的统计</li>
+                            <li>门店列表：展示所有门店在筛选时间段的数据，支持分页</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-check-circle-fill text-primary"></i> 门店详情页（单独页面）</h6>
+                        <ul>
+                            <li>近30天指标推移图表（线索量、到店数、到店率）</li>
+                            <li>周期内数据摘要</li>
+                            <li>跟进历史记录（按任务分组展示）</li>
+                            <li>详细日报数据表格</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
