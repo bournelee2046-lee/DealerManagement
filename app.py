@@ -1,12 +1,14 @@
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import pandas as pd
 import sqlite3
 import os
 import json
+import hashlib
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
+app.secret_key = 'dealer_management_secret_key_2024'
 app.config['UPLOAD_FOLDER'] = './uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
 
@@ -19,6 +21,108 @@ def get_db_connection():
     conn = sqlite3.connect('日报.db')
     conn.row_factory = sqlite3.Row
     return conn
+
+def hash_password(password):
+    """密码哈希"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def init_auth_tables():
+    """初始化账号管理相关表"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查用户表是否存在，如果不存在则创建
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='用户表'")
+    if not cursor.fetchone():
+        # 创建新的用户表
+        cursor.execute("""
+            CREATE TABLE 用户表 (
+                用户ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                用户名 TEXT UNIQUE NOT NULL,
+                密码 TEXT NOT NULL,
+                显示名称 TEXT,
+                角色 TEXT DEFAULT 'user',
+                状态 TEXT DEFAULT '启用',
+                最后登录时间 TEXT,
+                创建时间 TEXT DEFAULT datetime('now')
+            )
+        """)
+    else:
+        # 检查现有表的列
+        cursor.execute("PRAGMA table_info(用户表)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        # 添加缺失的列
+        if '密码' not in columns:
+            cursor.execute("ALTER TABLE 用户表 ADD COLUMN 密码 TEXT DEFAULT ''")
+        if '角色' not in columns:
+            cursor.execute("ALTER TABLE 用户表 ADD COLUMN 角色 TEXT DEFAULT 'user'")
+        if '状态' not in columns:
+            cursor.execute("ALTER TABLE 用户表 ADD COLUMN 状态 TEXT DEFAULT '启用'")
+    
+    # 权限配置表：定义系统页面权限
+    sql1 = "CREATE TABLE IF NOT EXISTS 权限配置表 (权限ID INTEGER PRIMARY KEY AUTOINCREMENT, 权限编码 TEXT UNIQUE NOT NULL, 权限名称 TEXT NOT NULL, 页面路径 TEXT NOT NULL, 描述 TEXT, 创建时间 TEXT DEFAULT (datetime('now')))"
+    cursor.execute(sql1)
+    
+    # 用户权限表：用户与权限的关联
+    sql2 = "CREATE TABLE IF NOT EXISTS 用户权限表 (关联ID INTEGER PRIMARY KEY AUTOINCREMENT, 用户ID INTEGER NOT NULL, 权限ID INTEGER NOT NULL, 创建时间 TEXT DEFAULT (datetime('now')), FOREIGN KEY (用户ID) REFERENCES 用户表(用户ID), FOREIGN KEY (权限ID) REFERENCES 权限配置表(权限ID), UNIQUE(用户ID, 权限ID))"
+    cursor.execute(sql2)
+    
+    # 登录日志表：记录用户登录历史
+    sql3 = "CREATE TABLE IF NOT EXISTS 登录日志表 (日志ID INTEGER PRIMARY KEY AUTOINCREMENT, 用户ID INTEGER, 用户名 TEXT NOT NULL, 登录状态 TEXT NOT NULL, IP地址 TEXT, 用户代理 TEXT, 登录时间 TEXT DEFAULT (datetime('now')), FOREIGN KEY (用户ID) REFERENCES 用户表(用户ID))"
+    cursor.execute(sql3)
+    
+    # 初始化默认权限数据
+    default_permissions = [
+        ('home', '首页', '/', '系统首页'),
+        ('daily_import', '日报导入', '/daily_import', '日报数据导入页面'),
+        ('follow_up', '跟进治理', '/follow_up', '门店跟进治理页面'),
+        ('store_profile', '门店档案', '/store_profile', '门店档案查询页面'),
+        ('operation_logs', '操作日志', '/operation_logs', '操作日志查看页面'),
+        ('user_management', '账号管理', '/user_management', '账号管理后台页面')
+    ]
+    
+    for perm in default_permissions:
+        cursor.execute("""
+            INSERT OR IGNORE INTO 权限配置表 (权限编码, 权限名称, 页面路径, 描述)
+            VALUES (?, ?, ?, ?)
+        """, perm)
+    
+    # 检查是否已有管理员账号
+    cursor.execute("SELECT 用户ID FROM 用户表 WHERE 用户名 = 'admin'")
+    admin = cursor.fetchone()
+    
+    if not admin:
+        # 创建默认管理员账号（密码：admin123）
+        admin_password = hash_password('admin123')
+        cursor.execute("""
+            INSERT INTO 用户表 (用户名, 密码, 显示名称, 角色, 状态, 创建时间)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        """, ('admin', admin_password, '系统管理员', 'admin', '启用'))
+        admin_id = cursor.lastrowid
+    else:
+        admin_id = admin['用户ID']
+        # 确保管理员有密码
+        cursor.execute("SELECT 密码 FROM 用户表 WHERE 用户ID = ?", (admin_id,))
+        admin_data = cursor.fetchone()
+        if not admin_data['密码']:
+            admin_password = hash_password('admin123')
+            cursor.execute("UPDATE 用户表 SET 密码 = ? WHERE 用户ID = ?", (admin_password, admin_id))
+    
+    # 为管理员分配所有权限
+    cursor.execute("SELECT 权限ID FROM 权限配置表")
+    permissions = cursor.fetchall()
+    for perm in permissions:
+        cursor.execute("""
+            INSERT OR IGNORE INTO 用户权限表 (用户ID, 权限ID)
+            VALUES (?, ?)
+        """, (admin_id, perm['权限ID']))
+    
+    conn.commit()
+    conn.close()
+
+# 启动时初始化表
+init_auth_tables()
 
 def match_columns(excel_columns, db_columns):
     mapping = {}
@@ -1869,6 +1973,529 @@ def get_reason_analysis():
             'reason_distribution': reasons
         }
     })
+
+# ==================== 账号管理API ====================
+
+def check_login():
+    """检查用户是否已登录"""
+    return 'user_id' in session
+
+def get_current_user():
+    """获取当前登录用户信息"""
+    if not check_login():
+        return None
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 用户ID, 用户名, 显示名称, 角色, 状态
+        FROM 用户表
+        WHERE 用户ID = ?
+    """, (session['user_id'],))
+    user = cursor.fetchone()
+    conn.close()
+    
+    return dict(user) if user else None
+
+def check_permission(permission_code):
+    """检查当前用户是否有指定权限"""
+    if not check_login():
+        return False
+    
+    user = get_current_user()
+    if not user:
+        return False
+    
+    # 管理员拥有所有权限
+    if user['角色'] == 'admin':
+        return True
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 1 FROM 用户权限表 up
+        JOIN 权限配置表 p ON up.权限ID = p.权限ID
+        WHERE up.用户ID = ? AND p.权限编码 = ?
+    """, (user['用户ID'], permission_code))
+    result = cursor.fetchone()
+    conn.close()
+    
+    return result is not None
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """登录页面"""
+    if request.method == 'GET':
+        return render_template('login.html')
+    
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    
+    if not username or not password:
+        return jsonify({'success': False, 'message': '请输入用户名和密码'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 用户ID, 用户名, 密码, 显示名称, 角色, 状态
+        FROM 用户表
+        WHERE 用户名 = ?
+    """, (username,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    # 记录登录尝试日志
+    ip_address = request.remote_addr
+    user_agent = request.headers.get('User-Agent', '')[:200]
+    
+    if not user:
+        # 记录登录失败日志
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO 登录日志表 (用户名, 登录状态, IP地址, 用户代理)
+            VALUES (?, '失败', ?, ?)
+        """, (username, ip_address, user_agent))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': False, 'message': '用户名或密码错误'})
+    
+    if user['状态'] != '启用':
+        # 记录登录失败日志
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO 登录日志表 (用户ID, 用户名, 登录状态, IP地址, 用户代理)
+            VALUES (?, ?, '失败', ?, ?)
+        """, (user['用户ID'], username, ip_address, user_agent))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': False, 'message': '账号已被禁用'})
+    
+    if user['密码'] != hash_password(password):
+        # 记录登录失败日志
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO 登录日志表 (用户ID, 用户名, 登录状态, IP地址, 用户代理)
+            VALUES (?, ?, '失败', ?, ?)
+        """, (user['用户ID'], username, ip_address, user_agent))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': False, 'message': '用户名或密码错误'})
+    
+    # 登录成功，设置session
+    session['user_id'] = user['用户ID']
+    session['username'] = user['用户名']
+    session['role'] = user['角色']
+    
+    # 更新最后登录时间
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE 用户表 SET 最后登录时间 = datetime('now')
+        WHERE 用户ID = ?
+    """, (user['用户ID'],))
+    
+    # 记录登录成功日志
+    cursor.execute("""
+        INSERT INTO 登录日志表 (用户ID, 用户名, 登录状态, IP地址, 用户代理)
+        VALUES (?, ?, '成功', ?, ?)
+    """, (user['用户ID'], username, ip_address, user_agent))
+    conn.commit()
+    conn.close()
+    
+    # 记录操作日志
+    log_operation(user['用户名'], '系统', '登录', {'操作': '用户登录', 'IP地址': ip_address})
+    
+    return jsonify({
+        'success': True,
+        'message': '登录成功',
+        'data': {
+            'user_id': user['用户ID'],
+            'username': user['用户名'],
+            'display_name': user['显示名称'],
+            'role': user['角色']
+        }
+    })
+
+@app.route('/logout')
+def logout():
+    """退出登录"""
+    if check_login():
+        username = session.get('username', '')
+        log_operation(username, '系统', '退出登录', {'操作': '用户退出登录'})
+    
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/api/current_user')
+def get_current_user_api():
+    """获取当前登录用户信息"""
+    user = get_current_user()
+    if not user:
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    # 获取用户权限
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT p.权限编码, p.权限名称, p.页面路径
+        FROM 用户权限表 up
+        JOIN 权限配置表 p ON up.权限ID = p.权限ID
+        WHERE up.用户ID = ?
+    """, (user['用户ID'],))
+    permissions = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            'user_id': user['用户ID'],
+            'username': user['用户名'],
+            'display_name': user['显示名称'],
+            'role': user['角色'],
+            'permissions': permissions
+        }
+    })
+
+@app.route('/api/check_permission/<permission_code>')
+def check_permission_api(permission_code):
+    """检查当前用户是否有指定权限"""
+    has_perm = check_permission(permission_code)
+    return jsonify({'success': True, 'has_permission': has_perm})
+
+# ==================== 管理员API（仅管理员可用） ====================
+
+def require_admin():
+    """检查是否为管理员"""
+    user = get_current_user()
+    if not user or user['角色'] != 'admin':
+        return False
+    return True
+
+@app.route('/user_management')
+def user_management_page():
+    """账号管理页面"""
+    if not check_login():
+        return redirect(url_for('login'))
+    
+    if not require_admin():
+        return "无权访问", 403
+    
+    return render_template('user_management.html')
+
+@app.route('/api/admin/users', methods=['GET', 'POST'])
+def admin_manage_users():
+    """管理员管理用户账号"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if request.method == 'GET':
+        # 获取所有用户列表
+        cursor.execute("""
+            SELECT 用户ID, 用户名, 显示名称, 角色, 状态, 最后登录时间, 创建时间
+            FROM 用户表
+            ORDER BY 创建时间 DESC
+        """)
+        users = [dict(row) for row in cursor.fetchall()]
+        
+        # 获取所有权限配置
+        cursor.execute("""
+            SELECT 权限ID, 权限编码, 权限名称, 页面路径, 描述
+            FROM 权限配置表
+            ORDER BY 权限ID
+        """)
+        permissions = [dict(row) for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'users': users,
+                'permissions': permissions
+            }
+        })
+    
+    elif request.method == 'POST':
+        # 创建新用户
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        display_name = data.get('display_name', '').strip()
+        role = data.get('role', 'user')
+        permissions = data.get('permissions', [])
+        
+        if not username or not password:
+            conn.close()
+            return jsonify({'success': False, 'message': '用户名和密码不能为空'})
+        
+        if len(password) < 6:
+            conn.close()
+            return jsonify({'success': False, 'message': '密码长度至少6位'})
+        
+        # 检查用户名是否已存在
+        cursor.execute("SELECT 用户ID FROM 用户表 WHERE 用户名 = ?", (username,))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'message': '用户名已存在'})
+        
+        # 创建用户
+        hashed_password = hash_password(password)
+        cursor.execute("""
+            INSERT INTO 用户表 (用户名, 密码, 显示名称, 角色, 状态)
+            VALUES (?, ?, ?, ?, '启用')
+        """, (username, hashed_password, display_name or username, role))
+        
+        user_id = cursor.lastrowid
+        
+        # 分配权限
+        for perm_id in permissions:
+            cursor.execute("""
+                INSERT INTO 用户权限表 (用户ID, 权限ID)
+                VALUES (?, ?)
+            """, (user_id, perm_id))
+        
+        conn.commit()
+        conn.close()
+        
+        # 记录操作日志
+        log_operation(session.get('username', ''), '账号管理', '创建用户', {
+            '创建用户': username,
+            '角色': role
+        })
+        
+        return jsonify({'success': True, 'message': '用户创建成功'})
+
+@app.route('/api/admin/users/<int:user_id>', methods=['PUT', 'DELETE'])
+def admin_manage_user(user_id):
+    """管理员修改/删除用户"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if request.method == 'PUT':
+        data = request.get_json()
+        display_name = data.get('display_name', '').strip()
+        role = data.get('role')
+        status = data.get('status')
+        password = data.get('password', '').strip()
+        permissions = data.get('permissions')
+        
+        # 更新用户信息
+        updates = []
+        params = []
+        
+        if display_name:
+            updates.append("显示名称 = ?")
+            params.append(display_name)
+        if role:
+            updates.append("角色 = ?")
+            params.append(role)
+        if status:
+            updates.append("状态 = ?")
+            params.append(status)
+        if password:
+            if len(password) < 6:
+                conn.close()
+                return jsonify({'success': False, 'message': '密码长度至少6位'})
+            updates.append("密码 = ?")
+            params.append(hash_password(password))
+        
+        if updates:
+            params.append(user_id)
+            cursor.execute(f"""
+                UPDATE 用户表
+                SET {', '.join(updates)}
+                WHERE 用户ID = ?
+            """, params)
+        
+        # 更新权限
+        if permissions is not None:
+            # 删除原有权限
+            cursor.execute("DELETE FROM 用户权限表 WHERE 用户ID = ?", (user_id,))
+            # 添加新权限
+            for perm_id in permissions:
+                cursor.execute("""
+                    INSERT INTO 用户权限表 (用户ID, 权限ID)
+                    VALUES (?, ?)
+                """, (user_id, perm_id))
+        
+        conn.commit()
+        conn.close()
+        
+        # 记录操作日志
+        log_operation(session.get('username', ''), '账号管理', '修改用户', {
+            '修改用户ID': user_id,
+            '修改内容': data
+        })
+        
+        return jsonify({'success': True, 'message': '用户更新成功'})
+    
+    elif request.method == 'DELETE':
+        # 不能删除自己
+        cursor.execute("SELECT 用户名 FROM 用户表 WHERE 用户ID = ?", (user_id,))
+        user = cursor.fetchone()
+        if user and user['用户名'] == session.get('username'):
+            conn.close()
+            return jsonify({'success': False, 'message': '不能删除当前登录账号'})
+        
+        # 删除用户权限
+        cursor.execute("DELETE FROM 用户权限表 WHERE 用户ID = ?", (user_id,))
+        # 删除用户
+        cursor.execute("DELETE FROM 用户表 WHERE 用户ID = ?", (user_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        # 记录操作日志
+        log_operation(session.get('username', ''), '账号管理', '删除用户', {
+            '删除用户ID': user_id
+        })
+        
+        return jsonify({'success': True, 'message': '用户删除成功'})
+
+@app.route('/api/admin/user_permissions/<int:user_id>')
+def get_user_permissions(user_id):
+    """获取指定用户的权限"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT p.权限ID, p.权限编码, p.权限名称
+        FROM 用户权限表 up
+        JOIN 权限配置表 p ON up.权限ID = p.权限ID
+        WHERE up.用户ID = ?
+    """, (user_id,))
+    
+    permissions = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'success': True, 'data': permissions})
+
+# ==================== 登录日志API（仅管理员可用） ====================
+
+@app.route('/api/admin/login_logs')
+def get_login_logs():
+    """获取登录日志列表（支持筛选）"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 构建查询
+    sql = "SELECT 日志ID, 用户ID, 用户名, 登录状态, IP地址, 用户代理, 登录时间 FROM 登录日志表 WHERE 1=1"
+    params = []
+    
+    # 筛选条件
+    username = request.args.get('username')
+    if username:
+        sql += " AND 用户名 LIKE ?"
+        params.append(f'%{username}%')
+    
+    status = request.args.get('status')
+    if status:
+        sql += " AND 登录状态 = ?"
+        params.append(status)
+    
+    start_date = request.args.get('start_date')
+    if start_date:
+        sql += " AND date(登录时间) >= date(?)"
+        params.append(start_date)
+    
+    end_date = request.args.get('end_date')
+    if end_date:
+        sql += " AND date(登录时间) <= date(?)"
+        params.append(end_date)
+    
+    # 排序
+    sql += " ORDER BY 登录时间 DESC LIMIT 500"
+    
+    cursor.execute(sql, params)
+    logs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'success': True, 'data': logs})
+
+@app.route('/api/admin/login_logs/<int:log_id>')
+def get_login_log_detail(log_id):
+    """获取单条登录日志详情"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 日志ID, 用户ID, 用户名, 登录状态, IP地址, 用户代理, 登录时间
+        FROM 登录日志表
+        WHERE 日志ID = ?
+    """, (log_id,))
+    
+    log = cursor.fetchone()
+    conn.close()
+    
+    if not log:
+        return jsonify({'success': False, 'message': '日志不存在'})
+    
+    return jsonify({'success': True, 'data': dict(log)})
+
+@app.route('/api/admin/login_logs/clear', methods=['POST'])
+def clear_login_logs():
+    """清空登录日志（可选功能）"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 只保留最近100条
+    cursor.execute("""
+        DELETE FROM 登录日志表
+        WHERE 日志ID NOT IN (
+            SELECT 日志ID FROM 登录日志表 ORDER BY 登录时间 DESC LIMIT 100
+        )
+    """)
+    
+    deleted_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    # 记录操作日志
+    log_operation(session.get('username', ''), '账号管理', '清空登录日志', {
+        '删除记录数': deleted_count
+    })
+    
+    return jsonify({'success': True, 'message': f'已删除 {deleted_count} 条日志'})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5003)
