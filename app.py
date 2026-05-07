@@ -22,6 +22,13 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def get_leads_db_connection():
+    """连接到leads.db（只读）"""
+    leads_db_path = '/Users/bournelll/Desktop/线索运营/leads.db'
+    conn = sqlite3.connect(leads_db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def hash_password(password):
     """密码哈希"""
     return hashlib.sha256(password.encode()).hexdigest()
@@ -72,12 +79,161 @@ def init_auth_tables():
     sql3 = "CREATE TABLE IF NOT EXISTS 登录日志表 (日志ID INTEGER PRIMARY KEY AUTOINCREMENT, 用户ID INTEGER, 用户名 TEXT NOT NULL, 登录状态 TEXT NOT NULL, IP地址 TEXT, 用户代理 TEXT, 登录时间 TEXT DEFAULT (datetime('now')), FOREIGN KEY (用户ID) REFERENCES 用户表(用户ID))"
     cursor.execute(sql3)
     
+    # 门店管理配置表：存储门店状态和备注
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS 门店管理配置表 (
+            管理ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            店编号 TEXT UNIQUE NOT NULL,
+            门店状态 TEXT DEFAULT '正常',
+            状态备注 TEXT,
+            管理员备注 TEXT,
+            创建时间 TEXT DEFAULT (datetime('now')),
+            更新时间 TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    
+    # 门店状态配置表：管理状态和评级选项（增加配置类型字段）
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS 门店状态配置表 (
+            状态ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            状态名称 TEXT UNIQUE NOT NULL,
+            状态颜色 TEXT,
+            排序 INTEGER DEFAULT 0,
+            配置类型 TEXT DEFAULT '状态',
+            创建时间 TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    
+    # 检查并添加配置类型字段
+    cursor.execute("PRAGMA table_info(门店状态配置表)")
+    existing_columns = [col[1] for col in cursor.fetchall()]
+    if '配置类型' not in existing_columns:
+        cursor.execute("ALTER TABLE 门店状态配置表 ADD COLUMN 配置类型 TEXT DEFAULT '状态'")
+    
+    # 删除之前可能创建的门店评级配置表
+    cursor.execute("DROP TABLE IF EXISTS 门店评级配置表")
+    
+    # 为门店管理配置表添加门店评级字段（如果不存在）
+    cursor.execute("PRAGMA table_info(门店管理配置表)")
+    existing_columns = [col[1] for col in cursor.fetchall()]
+    if '门店评级' not in existing_columns:
+        cursor.execute("ALTER TABLE 门店管理配置表 ADD COLUMN 门店评级 TEXT")
+    
+    # 修改跟进任务表，添加状态字段（支持任务完结/归档功能）
+    cursor.execute("PRAGMA table_info(跟进任务)")
+    task_columns = [col[1] for col in cursor.fetchall()]
+    if '状态' not in task_columns:
+        cursor.execute("ALTER TABLE 跟进任务 ADD COLUMN 状态 TEXT DEFAULT '进行中'")
+    if '完成时间' not in task_columns:
+        cursor.execute("ALTER TABLE 跟进任务 ADD COLUMN 完成时间 TEXT")
+    if '完成人' not in task_columns:
+        cursor.execute("ALTER TABLE 跟进任务 ADD COLUMN 完成人 TEXT")
+    if '归档时间' not in task_columns:
+        cursor.execute("ALTER TABLE 跟进任务 ADD COLUMN 归档时间 TEXT")
+    if '归档人' not in task_columns:
+        cursor.execute("ALTER TABLE 跟进任务 ADD COLUMN 归档人 TEXT")
+    if '基准日期' not in task_columns:
+        cursor.execute("ALTER TABLE 跟进任务 ADD COLUMN 基准日期 TEXT")
+    if '基准数据' not in task_columns:
+        cursor.execute("ALTER TABLE 跟进任务 ADD COLUMN 基准数据 TEXT")
+    
+    # 检查并创建跟进任务表（如果不存在）
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='跟进任务'")
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS 跟进任务 (
+                任务ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                周开始日期 TEXT NOT NULL,
+                门店列表 TEXT,
+                状态 TEXT DEFAULT '进行中',
+                创建时间 TEXT DEFAULT (datetime('now')),
+                完成时间 TEXT,
+                完成人 TEXT,
+                归档时间 TEXT,
+                归档人 TEXT,
+                基准日期 TEXT,
+                基准数据 TEXT
+            )
+        """)
+    
+    # 检查并创建跟进记录表（如果不存在）
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='跟进记录'")
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS 跟进记录 (
+                记录ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                任务ID INTEGER NOT NULL,
+                日报数据日期 TEXT,
+                店编号 TEXT NOT NULL,
+                店简称 TEXT,
+                "线索量-本地" REAL,
+                到店数 REAL,
+                跟进原因 TEXT,
+                备注 TEXT,
+                操作人 TEXT,
+                创建时间 TEXT DEFAULT (datetime('now')),
+                跟进时间 TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (任务ID) REFERENCES 跟进任务(任务ID)
+            )
+        """)
+    else:
+        # 如果表存在，检查并添加跟进时间字段
+        cursor.execute("PRAGMA table_info(跟进记录)")
+        record_columns = [col[1] for col in cursor.fetchall()]
+        if '跟进时间' not in record_columns:
+            cursor.execute("ALTER TABLE 跟进记录 ADD COLUMN 跟进时间 TEXT DEFAULT (datetime('now'))")
+    
+    # 创建任务历史记录表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS 任务历史记录表 (
+            历史ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            任务ID INTEGER NOT NULL,
+            操作类型 TEXT NOT NULL,
+            操作前状态 TEXT,
+            操作后状态 TEXT,
+            操作人 TEXT,
+            操作时间 TEXT DEFAULT (datetime('now')),
+            操作备注 TEXT
+        )
+    """)
+    
+    # 初始化默认状态数据（配置类型='状态'）
+    default_statuses = [
+        ('正常', '#28a745', 1, '状态'),
+        ('异常', '#dc3545', 2, '状态'),
+        ('停业', '#6c757d', 3, '状态'),
+        ('歇业', '#343a40', 4, '状态'),
+        ('装修中', '#fd7e14', 5, '状态')
+    ]
+    
+    for status in default_statuses:
+        cursor.execute("""
+            INSERT OR IGNORE INTO 门店状态配置表 (状态名称, 状态颜色, 排序, 配置类型)
+            VALUES (?, ?, ?, ?)
+        """, status)
+    
+    # 初始化默认评级数据（配置类型='评级'）
+    default_ratings = [
+        ('A级', '#28a745', 1, '评级'),
+        ('B级', '#17a2b8', 2, '评级'),
+        ('C级', '#ffc107', 3, '评级'),
+        ('D级', '#fd7e14', 4, '评级'),
+        ('E级', '#dc3545', 5, '评级')
+    ]
+    
+    for rating in default_ratings:
+        cursor.execute("""
+            INSERT OR IGNORE INTO 门店状态配置表 (状态名称, 状态颜色, 排序, 配置类型)
+            VALUES (?, ?, ?, ?)
+        """, rating)
+    
     # 初始化默认权限数据
     default_permissions = [
         ('home', '首页', '/', '系统首页'),
         ('daily_import', '日报导入', '/daily_import', '日报数据导入页面'),
         ('follow_up', '跟进治理', '/follow_up', '门店跟进治理页面'),
         ('store_profile', '门店档案', '/store_profile', '门店档案查询页面'),
+        ('store_management', '门店管理', '/store_management', '门店管理页面'),
         ('operation_logs', '操作日志', '/operation_logs', '操作日志查看页面'),
         ('user_management', '账号管理', '/user_management', '账号管理后台页面')
     ]
@@ -226,7 +382,7 @@ def get_date_range(start_date_str, end_date_str):
     except Exception as e:
         return None
 
-def insert_data_to_db(df, dates, source, is_single_day):
+def insert_data_to_db(df, dates, source, is_single_day, mode='new'):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -237,12 +393,37 @@ def insert_data_to_db(df, dates, source, is_single_day):
     excel_columns = df.columns.tolist()
     column_mapping = match_columns(excel_columns, db_columns)
     
-    # 根据日期范围设置数值性质
     value_type = '连续值' if is_single_day else '区间值'
     
     inserted_count = 0
+    
+    if mode == 'update':
+        for date_str in dates:
+            store_codes = []
+            for _, row in df.iterrows():
+                store_code = row.get('店编号')
+                if store_code and not pd.isna(store_code):
+                    store_codes.append(str(store_code))
+            
+            if store_codes:
+                placeholders = ','.join(['?' for _ in store_codes])
+                cursor.execute(f"""
+                    DELETE FROM 日报快照
+                    WHERE 日报数据日期 = ? AND 店编号 IN ({placeholders})
+                """, [date_str] + store_codes)
+    
     for date_str in dates:
         for _, row in df.iterrows():
+            store_code = row.get('店编号')
+            
+            if mode == 'new' and store_code and not pd.isna(store_code):
+                cursor.execute("""
+                    SELECT COUNT(*) as cnt FROM 日报快照
+                    WHERE 日报数据日期 = ? AND 店编号 = ?
+                """, (date_str, str(store_code)))
+                if cursor.fetchone()['cnt'] > 0:
+                    continue
+            
             values = {}
             for excel_col, db_col in column_mapping.items():
                 value = row.get(excel_col)
@@ -251,10 +432,7 @@ def insert_data_to_db(df, dates, source, is_single_day):
                 else:
                     values[db_col] = str(value)
             
-            # 设置日报数据日期
             values['日报数据日期'] = date_str
-            
-            # 设置到店数来源和数值性质
             values['到店数来源'] = source
             values['数值性质'] = value_type
             
@@ -346,6 +524,190 @@ def get_stores():
     
     return jsonify({'success': True, 'data': data})
 
+@app.route('/api/stores/latest')
+def get_stores_latest():
+    """获取最新日报日期的门店统计数据"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 日报数据日期 
+        FROM 日报快照 
+        ORDER BY 
+            CAST(SUBSTR(日报数据日期, 1, INSTR(日报数据日期, '/') - 1) AS INTEGER) DESC,
+            CAST(SUBSTR(日报数据日期, INSTR(日报数据日期, '/') + 1) AS INTEGER) DESC
+        LIMIT 1
+    """)
+    latest_row = cursor.fetchone()
+    
+    if not latest_row:
+        conn.close()
+        return jsonify({'success': True, 'data': [], 'latestDate': None})
+    
+    latest_date = latest_row['日报数据日期']
+    
+    cursor.execute("""
+        SELECT 店编号, 店简称, 大区, 战区,
+               COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as 线索量本地,
+               COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
+        FROM 日报快照
+        WHERE 日报数据日期 = ?
+        GROUP BY 店编号, 店简称, 大区, 战区
+        ORDER BY 店编号
+    """, (latest_date,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    data = []
+    for row in rows:
+        record = dict(row)
+        try:
+            线索量 = float(record['线索量本地'])
+            到店数 = float(record['到店数'])
+            if 线索量 > 0:
+                record['到店率'] = round(到店数 / 线索量 * 100, 2)
+            else:
+                record['到店率'] = 0
+        except:
+            record['到店率'] = 0
+        data.append(record)
+    
+    return jsonify({'success': True, 'data': data, 'latestDate': latest_date})
+
+@app.route('/api/stores/base/<int:task_id>')
+def get_stores_base(task_id):
+    """获取任务基准日期的所有门店数据"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT 基准日期 FROM 跟进任务 WHERE 任务ID = ?", (task_id,))
+    task = cursor.fetchone()
+    if not task or not task['基准日期']:
+        conn.close()
+        return jsonify({'success': False, 'message': '任务不存在或无基准日期'})
+    
+    base_date_str = task['基准日期']
+    
+    cursor.execute("""
+        SELECT 店编号, 店简称, 大区, 战区,
+               COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as "线索量-本地",
+               COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
+        FROM 日报快照
+        WHERE 日报数据日期 = ?
+        GROUP BY 店编号, 店简称, 大区, 战区
+        ORDER BY 店编号
+    """, (base_date_str,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    data = []
+    for row in rows:
+        record = dict(row)
+        try:
+            线索量 = float(record.get('线索量-本地', 0) or 0)
+            到店数 = float(record.get('到店数', 0) or 0)
+            record['线索量本地'] = 线索量
+            if 线索量 > 0:
+                record['到店率'] = round(到店数 / 线索量 * 100, 2)
+            else:
+                record['到店率'] = 0
+        except:
+            record['到店率'] = 0
+            record['线索量本地'] = 0
+        data.append(record)
+    
+    return jsonify({'success': True, 'data': data, '基准日期': base_date_str})
+
+@app.route('/api/pre_import_check', methods=['POST'])
+def pre_import_check():
+    """预处理检查接口：检查导入数据的影响范围"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'})
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({'success': False, 'message': '文件名不能为空'})
+    
+    start_date = request.form.get('start_date')
+    end_date = request.form.get('end_date')
+    source = request.form.get('source', '零售部')
+    mode = request.form.get('mode', 'new')
+    
+    if not start_date or not end_date:
+        return jsonify({'success': False, 'message': '请选择日期范围'})
+    
+    dates = get_date_range(start_date, end_date)
+    if not dates:
+        return jsonify({'success': False, 'message': '日期格式无效'})
+    
+    if file and allowed_file(file.filename):
+        try:
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+            file.save(file_path)
+            
+            df, error = parse_excel(file_path)
+            
+            if error:
+                os.remove(file_path)
+                return jsonify({'success': False, 'message': error})
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            new_count = 0
+            skip_count = 0
+            update_count = 0
+            
+            if mode == 'new':
+                for date_str in dates:
+                    for _, row in df.iterrows():
+                        store_code = row.get('店编号')
+                        if store_code and not pd.isna(store_code):
+                            cursor.execute("""
+                                SELECT COUNT(*) as cnt FROM 日报快照
+                                WHERE 日报数据日期 = ? AND 店编号 = ?
+                            """, (date_str, str(store_code)))
+                            exists = cursor.fetchone()['cnt'] > 0
+                            if exists:
+                                skip_count += 1
+                            else:
+                                new_count += 1
+            else:
+                for date_str in dates:
+                    for _, row in df.iterrows():
+                        store_code = row.get('店编号')
+                        if store_code and not pd.isna(store_code):
+                            cursor.execute("""
+                                SELECT COUNT(*) as cnt FROM 日报快照
+                                WHERE 日报数据日期 = ? AND 店编号 = ?
+                            """, (date_str, str(store_code)))
+                            exists = cursor.fetchone()['cnt'] > 0
+                            if exists:
+                                update_count += 1
+                            else:
+                                new_count += 1
+            
+            conn.close()
+            os.remove(file_path)
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'new_count': new_count,
+                    'skip_count': skip_count,
+                    'update_count': update_count,
+                    'total_rows': len(df),
+                    'dates_count': len(dates)
+                }
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'预处理检查失败: {str(e)}'})
+    
+    return jsonify({'success': False, 'message': '不支持的文件格式'})
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -359,6 +721,7 @@ def upload_file():
     start_date = request.form.get('start_date')
     end_date = request.form.get('end_date')
     source = request.form.get('source', '零售部')
+    mode = request.form.get('mode', 'new')
     
     if not start_date or not end_date:
         return jsonify({'success': False, 'message': '请选择日期范围'})
@@ -367,7 +730,6 @@ def upload_file():
     if not dates:
         return jsonify({'success': False, 'message': '日期格式无效'})
     
-    # 判断是单日还是日期范围
     is_single_day = len(dates) == 1
     
     if file and allowed_file(file.filename):
@@ -380,13 +742,14 @@ def upload_file():
             if error:
                 return jsonify({'success': False, 'message': error})
             
-            inserted_count = insert_data_to_db(df, dates, source, is_single_day)
+            inserted_count = insert_data_to_db(df, dates, source, is_single_day, mode)
             
             os.remove(file_path)
             
+            mode_text = '新增' if mode == 'new' else '更新'
             return jsonify({
                 'success': True,
-                'message': f'数据同步成功！共写入 {inserted_count} 条记录',
+                'message': f'数据{mode_text}成功！共写入 {inserted_count} 条记录',
                 'dates': dates
             })
         except Exception as e:
@@ -633,11 +996,34 @@ def manage_follow_tasks():
     cursor = conn.cursor()
     
     if request.method == 'GET':
+        task_type = request.args.get('type', 'active')
+        status_filter = request.args.get('status', '')
+        
+        # 获取各状态的任务数量
         cursor.execute("""
-            SELECT 任务ID, 周开始日期, 门店列表, 状态, 创建时间
+            SELECT 状态, COUNT(*) as count
             FROM 跟进任务
-            ORDER BY 创建时间 DESC
+            GROUP BY 状态
         """)
+        counts = {'进行中': 0, '已完成': 0, '已归档': 0}
+        for row in cursor.fetchall():
+            if row['状态'] in counts:
+                counts[row['状态']] = row['count']
+        
+        # 构建查询条件
+        if task_type == 'active':
+            sql = "SELECT 任务ID, 周开始日期, 门店列表, 状态, 创建时间, 完成时间, 完成人 FROM 跟进任务 WHERE 状态 = '进行中'"
+        elif task_type == 'history':
+            sql = "SELECT 任务ID, 周开始日期, 门店列表, 状态, 创建时间, 完成时间, 完成人, 归档时间, 归档人 FROM 跟进任务 WHERE 状态 IN ('已完成', '已归档')"
+        else:
+            if status_filter:
+                sql = f"SELECT 任务ID, 周开始日期, 门店列表, 状态, 创建时间, 完成时间, 完成人, 归档时间, 归档人 FROM 跟进任务 WHERE 状态 = '{status_filter}'"
+            else:
+                sql = "SELECT 任务ID, 周开始日期, 门店列表, 状态, 创建时间, 完成时间, 完成人, 归档时间, 归档人 FROM 跟进任务"
+        
+        sql += " ORDER BY 创建时间 DESC"
+        
+        cursor.execute(sql)
         tasks = [dict(row) for row in cursor.fetchall()]
         conn.close()
         
@@ -650,10 +1036,21 @@ def manage_follow_tasks():
                 'dateRange': task['周开始日期'],
                 '周开始日期': task['周开始日期'],
                 '门店列表': task['门店列表'],
-                '状态': task['状态']
+                '状态': task['状态'],
+                '创建时间': task['创建时间'],
+                '完成时间': task.get('完成时间'),
+                '完成人': task.get('完成人'),
+                '归档时间': task.get('归档时间'),
+                '归档人': task.get('归档人')
             })
         
-        return jsonify({'success': True, 'data': formatted_tasks})
+        return jsonify({
+            'success': True,
+            'data': {
+                'tasks': formatted_tasks,
+                'counts': counts
+            }
+        })
     
     elif request.method == 'POST':
         data = request.get_json()
@@ -664,15 +1061,101 @@ def manage_follow_tasks():
             conn.close()
             return jsonify({'success': False, 'message': '缺少周开始日期'})
         
+        # 计算基准日期（上周日 = 周一开始日期 - 1天）
+        try:
+            base_date = datetime.strptime(week_start, '%Y-%m-%d')
+            base_date = base_date - timedelta(days=1)
+            # 构建不带前导零的日期字符串，匹配数据库格式
+            base_date_str = f'{base_date.year}/{base_date.month}/{base_date.day}'
+        except:
+            conn.close()
+            return jsonify({'success': False, 'message': '日期格式无效'})
+        
+        # 检查基准日期的日报数据是否存在
         cursor.execute("""
-            INSERT INTO 跟进任务 (周开始日期, 门店列表, 状态, 创建时间)
-            VALUES (?, ?, '进行中', datetime('now'))
-        """, (week_start, store_list))
+            SELECT COUNT(*) as cnt FROM 日报快照
+            WHERE 日报数据日期 = ?
+        """, (base_date_str,))
+        base_data_exists = cursor.fetchone()['cnt'] > 0
+        
+        if not base_data_exists:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'needImport': True,
+                '基准日期': base_date_str,
+                'message': f'请先导入{base_date_str}的日报数据后再创建任务'
+            })
+        
+        # 获取基准数据
+        cursor.execute("""
+            SELECT 店编号, 店简称, 大区, 战区,
+                   COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as "线索量-本地",
+                   COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
+            FROM 日报快照
+            WHERE 日报数据日期 = ?
+            GROUP BY 店编号, 店简称, 大区, 战区
+            ORDER BY 店编号
+        """, (base_date_str,))
+        
+        base_stores = []
+        for row in cursor.fetchall():
+            base_stores.append(dict(row))
+        
+        import json
+        base_data_json = json.dumps(base_stores, ensure_ascii=False)
+        
+        # 自动完结上一周期任务
+        username = session.get('username', '系统')
+        cursor.execute("""
+            SELECT 任务ID, 周开始日期 FROM 跟进任务
+            WHERE 状态 = '进行中'
+            ORDER BY 创建时间 DESC LIMIT 1
+        """)
+        previous_task = cursor.fetchone()
+        
+        if previous_task:
+            cursor.execute("""
+                UPDATE 跟进任务
+                SET 状态 = '已完成', 完成时间 = datetime('now'), 完成人 = ?
+                WHERE 任务ID = ?
+            """, (username, previous_task['任务ID']))
+            
+            cursor.execute("""
+                INSERT INTO 任务历史记录表 (任务ID, 操作类型, 操作前状态, 操作后状态, 操作人, 操作备注)
+                VALUES (?, 'completed_auto', '进行中', '已完成', ?, '系统自动完结')
+            """, (previous_task['任务ID'], username))
+        
+        # 创建新任务（包含基准日期和基准数据）
+        cursor.execute("""
+            INSERT INTO 跟进任务 (周开始日期, 门店列表, 状态, 创建时间, 基准日期, 基准数据)
+            VALUES (?, ?, '进行中', datetime('now'), ?, ?)
+        """, (week_start, store_list, base_date_str, base_data_json))
         
         task_id = cursor.lastrowid
+        
+        # 记录创建任务的历史
+        cursor.execute("""
+            INSERT INTO 任务历史记录表 (任务ID, 操作类型, 操作前状态, 操作后状态, 操作人, 操作备注)
+            VALUES (?, 'created', '', '进行中', ?, '创建新任务')
+        """, (task_id, username))
+        
         conn.commit()
         conn.close()
-        return jsonify({'success': True, 'data': {'id': task_id}, 'message': '任务创建成功'})
+        
+        message = '任务创建成功'
+        if previous_task:
+            message = f'任务创建成功，自动完结了上一周期任务（{previous_task["周开始日期"]}）'
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'id': task_id,
+                '基准日期': base_date_str,
+                '基准数据': base_stores
+            },
+            'message': message
+        })
 
 @app.route('/api/follow_tasks/<int:task_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_follow_task(task_id):
@@ -682,7 +1165,7 @@ def manage_follow_task(task_id):
     
     if request.method == 'GET':
         cursor.execute("""
-            SELECT 任务ID, 周开始日期, 门店列表, 状态, 创建时间
+            SELECT 任务ID, 周开始日期, 门店列表, 状态, 创建时间, 基准日期, 基准数据
             FROM 跟进任务
             WHERE 任务ID = ?
         """, (task_id,))
@@ -694,99 +1177,156 @@ def manage_follow_task(task_id):
         
         task_data = dict(task)
         
-        # 解析门店列表并获取门店详情
-        store_list_str = task_data['门店列表']
         stores = []
-        seen = set()
         
+        # 解析门店列表
+        store_list_str = task_data['门店列表']
+        store_codes = []
         if store_list_str:
             try:
-                # 尝试解析JSON格式
                 import json
-                store_codes = json.loads(store_list_str)
-                if isinstance(store_codes, list) and len(store_codes) > 0 and isinstance(store_codes[0], dict):
-                    # 如果是对象数组，去重
-                    for store in store_codes:
-                        code = store.get('店编号')
-                        if code and code not in seen:
-                            seen.add(code)
-                            stores.append(store)
-                else:
-                    # 如果是字符串列表，获取门店详情
-                    if isinstance(store_codes, list):
-                        codes = store_codes
-                    else:
-                        codes = str(store_list_str).split(',')
-                    
-                    if codes:
-                        # 先去重门店编号
-                        unique_codes = []
-                        code_seen = set()
-                        for code in codes:
-                            if code and code not in code_seen:
-                                code_seen.add(code)
-                                unique_codes.append(code)
-                        
-                        if unique_codes:
-                            placeholders = ','.join(['?' for _ in unique_codes])
-                            cursor.execute(f"""
-                                SELECT 店编号, 店简称, 大区, 战区,
-                                       COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as 线索量本地,
-                                       COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
-                                FROM 日报快照
-                                WHERE 店编号 IN ({placeholders})
-                                GROUP BY 店编号, 店简称, 大区, 战区
-                                ORDER BY 店编号
-                            """, unique_codes)
-                            
-                            for row in cursor.fetchall():
-                                store = dict(row)
-                                try:
-                                    线索量 = float(store['线索量本地'])
-                                    到店数 = float(store['到店数'])
-                                    if 线索量 > 0:
-                                        store['到店率'] = round(到店数 / 线索量 * 100, 2)
-                                    else:
-                                        store['到店率'] = 0
-                                except:
-                                    store['到店率'] = 0
-                                stores.append(store)
+                store_codes_list = json.loads(store_list_str)
+                if isinstance(store_codes_list, list):
+                    for item in store_codes_list:
+                        if isinstance(item, dict):
+                            store_codes.append(item.get('店编号', ''))
+                        else:
+                            store_codes.append(str(item))
             except:
-                # 如果不是JSON，尝试按逗号分割
-                codes = str(store_list_str).split(',')
-                if codes and codes[0]:
-                    # 先去重门店编号
-                    unique_codes = []
-                    code_seen = set()
-                    for code in codes:
-                        if code and code not in code_seen:
-                            code_seen.add(code)
-                            unique_codes.append(code)
+                store_codes = [c.strip() for c in str(store_list_str).split(',') if c.strip()]
+        
+        # 优先使用任务中存储的基准数据，否则从日报中查询
+        if task_data.get('基准数据'):
+            try:
+                import json
+                stores = json.loads(task_data['基准数据'])
+                for store in stores:
+                    try:
+                        线索量 = float(store.get('线索量-本地', 0) or 0)
+                        到店数 = float(store.get('到店数', 0) or 0)
+                        if 线索量 > 0:
+                            store['到店率'] = round(到店数 / 线索量 * 100, 2)
+                        else:
+                            store['到店率'] = 0
+                        store['线索量本地'] = store.get('线索量-本地', 0)
+                    except:
+                        store['到店率'] = 0
+                        store['线索量本地'] = 0
+            except:
+                stores = []
+        
+        # 如果没有基准数据，从日报中查询作为基准
+        if not stores and store_codes:
+            for code in store_codes:
+                cursor.execute("""
+                    SELECT 店编号, 店简称, 大区, 战区,
+                           COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as 线索量,
+                           COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
+                    FROM 日报快照
+                    WHERE 店编号 = ?
+                    ORDER BY 
+                        CAST(SUBSTR(日报数据日期, 1, INSTR(日报数据日期, '/') - 1) AS INTEGER) DESC,
+                        CAST(SUBSTR(日报数据日期, INSTR(日报数据日期, '/') + 1) AS INTEGER) DESC
+                    LIMIT 1
+                """, (code,))
+                row = cursor.fetchone()
+                if row:
+                    线索量 = float(row['线索量'] or 0)
+                    到店数 = float(row['到店数'] or 0)
+                    stores.append({
+                        '店编号': row['店编号'],
+                        '店简称': row['店简称'],
+                        '大区': row['大区'],
+                        '线索量-本地': 线索量,
+                        '线索量本地': 线索量,
+                        '到店数': 到店数,
+                        '到店率': round(到店数 / 线索量 * 100, 2) if 线索量 > 0 else 0
+                    })
+        
+        # 获取最新日报数据并计算增量
+        if stores:
+            for store in stores:
+                store_code = store.get('店编号', '')
+                # 先找到该门店的最新日报日期
+                cursor.execute("""
+                    SELECT 日报数据日期
+                    FROM 日报快照
+                    WHERE 店编号 = ?
+                    ORDER BY
+                        CAST(SUBSTR(日报数据日期, 1, INSTR(日报数据日期, '/') - 1) AS INTEGER) DESC,
+                        CAST(SUBSTR(日报数据日期, INSTR(日报数据日期, '/') + 1) AS INTEGER) DESC
+                    LIMIT 1
+                """, (store_code,))
+                latest_date_row = cursor.fetchone()
+                
+                if latest_date_row:
+                    latest_date = latest_date_row['日报数据日期']
+                    # 根据最新日期获取数据
+                    cursor.execute("""
+                        SELECT COALESCE(CAST("线索量-本地" AS REAL), 0) as 线索量,
+                               COALESCE(CAST(到店数 AS REAL), 0) as 到店数
+                        FROM 日报快照
+                        WHERE 店编号 = ? AND 日报数据日期 = ?
+                    """, (store_code, latest_date))
+                    latest_data = cursor.fetchone()
+                else:
+                    latest_data = None
+                
+                if latest_data:
+                    基准线索量 = float(store.get('线索量本地', 0) or 0)
+                    基准到店数 = float(store.get('到店数', 0) or 0)
+                    最新线索量 = float(latest_data['线索量'] or 0)
+                    最新到店数 = float(latest_data['到店数'] or 0)
                     
-                    if unique_codes:
-                        placeholders = ','.join(['?' for _ in unique_codes])
-                        cursor.execute(f"""
-                            SELECT 店编号, 店简称, 大区, 战区,
-                                   COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as 线索量本地,
-                                   COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
-                            FROM 日报快照
-                            WHERE 店编号 IN ({placeholders})
-                            GROUP BY 店编号, 店简称, 大区, 战区
-                            ORDER BY 店编号
-                        """, unique_codes)
-                        
-                        for row in cursor.fetchall():
-                            store = dict(row)
-                            try:
-                                线索量 = float(store['线索量本地'])
-                                到店数 = float(store['到店数'])
-                                if 线索量 > 0:
-                                    store['到店率'] = round(到店数 / 线索量 * 100, 2)
-                                else:
-                                    store['到店率'] = 0
-                            except:
-                                store['到店率'] = 0
-                            stores.append(store)
+                    store['最新线索量'] = 最新线索量
+                    store['最新到店数'] = 最新到店数
+                    store['到店数增量'] = round(最新到店数 - 基准到店数, 2)
+                    
+                    if 最新线索量 > 0:
+                        最新到店率 = round(最新到店数 / 最新线索量 * 100, 2)
+                    else:
+                        最新到店率 = 0
+                    store['最新到店率'] = 最新到店率
+                    基准到店率 = store.get('到店率', 0) or 0
+                    store['到店率变化'] = round(最新到店率 - 基准到店率, 2)
+                else:
+                    store['最新线索量'] = 0
+                    store['最新到店数'] = 0
+                    store['到店数增量'] = 0
+                    store['最新到店率'] = 0
+                    store['到店率变化'] = 0
+        
+        # 获取跟进状态
+        store_follow_status = {}
+        if store_codes:
+            for code in store_codes:
+                store_follow_status[code] = False
+        
+        # 获取跟进记录
+        cursor.execute("""
+            SELECT 店编号, 日报数据日期, 跟进原因, 备注, 操作人, 创建时间, 跟进时间
+            FROM 跟进记录
+            WHERE 任务ID = ?
+            ORDER BY 跟进时间 DESC
+        """, (task_id,))
+        
+        follow_records = {}
+        for record in cursor.fetchall():
+            code = record['店编号']
+            if code not in follow_records:
+                follow_records[code] = []
+            follow_records[code].append({
+                '跟进时间': record['跟进时间'],
+                '跟进原因': record['跟进原因'],
+                '备注': record['备注'],
+                '操作人': record['操作人']
+            })
+        
+        # 为门店添加跟进状态
+        for store in stores:
+            code = store.get('店编号', '')
+            store['已跟进'] = store_follow_status.get(code, False)
+            store['跟进历史'] = follow_records.get(code, [])
         
         conn.close()
         
@@ -799,41 +1339,129 @@ def manage_follow_task(task_id):
                 '周开始日期': task_data['周开始日期'],
                 '门店列表': task_data['门店列表'],
                 'stores': stores,
-                '状态': task_data['状态']
+                '状态': task_data['状态'],
+                '基准日期': task_data.get('基准日期'),
+                '基准数据': stores
             }
         })
     
     elif request.method == 'PUT':
         data = request.get_json()
+        username = session.get('username', '系统')
         
-        updates = []
-        params = []
+        cursor.execute("SELECT 状态 FROM 跟进任务 WHERE 任务ID = ?", (task_id,))
+        task = cursor.fetchone()
+        if not task:
+            conn.close()
+            return jsonify({'success': False, 'message': '任务不存在'})
         
-        if '门店列表' in data:
-            updates.append("门店列表 = ?")
-            params.append(data['门店列表'])
-        if '状态' in data:
-            updates.append("状态 = ?")
-            params.append(data['状态'])
+        current_status = task['状态']
         
-        if updates:
-            params.append(task_id)
-            cursor.execute(f"""
-                UPDATE 跟进任务
-                SET {', '.join(updates)}
-                WHERE 任务ID = ?
-            """, params)
-            conn.commit()
+        if data.get('action') == 'complete':
+            if current_status == '进行中':
+                cursor.execute("""
+                    UPDATE 跟进任务
+                    SET 状态 = '已完成', 完成时间 = datetime('now'), 完成人 = ?
+                    WHERE 任务ID = ?
+                """, (username, task_id))
+                
+                cursor.execute("""
+                    INSERT INTO 任务历史记录表 (任务ID, 操作类型, 操作前状态, 操作后状态, 操作人, 操作备注)
+                    VALUES (?, 'completed', ?, '已完成', ?, '手动完结任务')
+                """, (task_id, current_status, username))
+                
+                conn.commit()
+                conn.close()
+                return jsonify({'success': True, 'message': '任务已完结'})
+            else:
+                conn.close()
+                return jsonify({'success': False, 'message': '只有进行中的任务才能完结'})
         
-        conn.close()
-        return jsonify({'success': True, 'message': '更新成功'})
+        elif data.get('action') == 'archive':
+            if current_status in ['进行中', '已完成']:
+                cursor.execute("""
+                    UPDATE 跟进任务
+                    SET 状态 = '已归档', 归档时间 = datetime('now'), 归档人 = ?
+                    WHERE 任务ID = ?
+                """, (username, task_id))
+                
+                cursor.execute("""
+                    INSERT INTO 任务历史记录表 (任务ID, 操作类型, 操作前状态, 操作后状态, 操作人, 操作备注)
+                    VALUES (?, 'archived', ?, '已归档', ?, '归档任务')
+                """, (task_id, current_status, username))
+                
+                conn.commit()
+                conn.close()
+                return jsonify({'success': True, 'message': '任务已归档'})
+            else:
+                conn.close()
+                return jsonify({'success': False, 'message': '该任务无法归档'})
+        
+        elif data.get('action') == 'restore':
+            if current_status == '已归档':
+                cursor.execute("""
+                    UPDATE 跟进任务
+                    SET 状态 = '进行中', 归档时间 = NULL, 归档人 = NULL
+                    WHERE 任务ID = ?
+                """, (task_id,))
+                
+                cursor.execute("""
+                    INSERT INTO 任务历史记录表 (任务ID, 操作类型, 操作前状态, 操作后状态, 操作人, 操作备注)
+                    VALUES (?, 'restored', '已归档', '进行中', ?, '恢复任务')
+                """, (task_id, username))
+                
+                conn.commit()
+                conn.close()
+                return jsonify({'success': True, 'message': '任务已恢复'})
+            else:
+                conn.close()
+                return jsonify({'success': False, 'message': '只有已归档的任务才能恢复'})
+        
+        else:
+            updates = []
+            params = []
+            
+            if '门店列表' in data:
+                updates.append("门店列表 = ?")
+                params.append(data['门店列表'])
+            
+            if updates:
+                params.append(task_id)
+                cursor.execute(f"""
+                    UPDATE 跟进任务
+                    SET {', '.join(updates)}
+                    WHERE 任务ID = ?
+                """, params)
+                conn.commit()
+            
+            conn.close()
+            return jsonify({'success': True, 'message': '任务已更新'})
     
     elif request.method == 'DELETE':
-        cursor.execute("DELETE FROM 跟进记录 WHERE 任务ID = ?", (task_id,))
-        cursor.execute("DELETE FROM 跟进任务 WHERE 任务ID = ?", (task_id,))
+        username = session.get('username', '系统')
+        
+        cursor.execute("SELECT 状态 FROM 跟进任务 WHERE 任务ID = ?", (task_id,))
+        task = cursor.fetchone()
+        if not task:
+            conn.close()
+            return jsonify({'success': False, 'message': '任务不存在'})
+        
+        current_status = task['状态']
+        
+        cursor.execute("""
+            UPDATE 跟进任务
+            SET 状态 = '已归档', 归档时间 = datetime('now'), 归档人 = ?
+            WHERE 任务ID = ?
+        """, (username, task_id))
+        
+        cursor.execute("""
+            INSERT INTO 任务历史记录表 (任务ID, 操作类型, 操作前状态, 操作后状态, 操作人, 操作备注)
+            VALUES (?, 'deleted', ?, '已归档', ?, '删除任务')
+        """, (task_id, current_status, username))
+        
         conn.commit()
         conn.close()
-        return jsonify({'success': True, 'message': '删除成功'})
+        return jsonify({'success': True, 'message': '任务已归档，可从历史记录中恢复'})
 
 @app.route('/api/follow_tasks/<int:task_id>/stores', methods=['POST'])
 def set_task_stores(task_id):
@@ -862,6 +1490,37 @@ def set_task_stores(task_id):
     
     conn.close()
     return jsonify({'success': True, 'message': '保存成功'})
+
+@app.route('/api/follow_tasks/<int:task_id>/history', methods=['GET'])
+def get_task_history(task_id):
+    """获取任务的变更历史记录"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 历史ID, 任务ID, 操作类型, 操作前状态, 操作后状态, 操作人, 操作时间, 操作备注
+        FROM 任务历史记录表
+        WHERE 任务ID = ?
+        ORDER BY 操作时间 DESC
+    """, (task_id,))
+    
+    history = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    operation_labels = {
+        'created': '创建任务',
+        'completed': '完结任务',
+        'completed_auto': '自动完结',
+        'archived': '归档任务',
+        'restored': '恢复任务',
+        'deleted': '删除任务',
+        'updated': '更新任务'
+    }
+    
+    for record in history:
+        record['操作类型标签'] = operation_labels.get(record['操作类型'], record['操作类型'])
+    
+    return jsonify({'success': True, 'data': history})
 
 @app.route('/api/follow_tasks/<int:task_id>/store/<store_code>/history')
 def get_store_history(task_id, store_code):
@@ -911,26 +1570,54 @@ def manage_follow_records():
         
         # 先获取任务的门店列表
         cursor.execute("""
-            SELECT 门店列表 FROM 跟进任务 WHERE 任务ID = ?
+            SELECT 门店列表, 基准日期, 基准数据 FROM 跟进任务 WHERE 任务ID = ?
         """, (task_id,))
         task = cursor.fetchone()
         task_stores_str = task['门店列表'] if task else ''
+        基准日期 = task['基准日期'] if task else None
+        基准数据 = task['基准数据'] if task else None
+        
+        # ------------------------------
+        # 步骤1：解析基准数据
+        # ------------------------------
+        基准店数据 = {}
+        if 基准数据:
+            try:
+                import json
+                stores = json.loads(基准数据)
+                for store in stores:
+                    店编号 = store.get('店编号')
+                    if 店编号:
+                        基准店数据[店编号] = {
+                            '线索量': float(store.get('线索量-本地', 0) or 0),
+                            '到店数': float(store.get('到店数', 0) or 0),
+                            '到店率': 0
+                        }
+                        线索量 = 基准店数据[店编号]['线索量']
+                        if 线索量 > 0:
+                            基准店数据[店编号]['到店率'] = round(基准店数据[店编号]['到店数'] / 线索量 * 100, 2)
+            except:
+                pass
         
         # 获取该日期所有门店的日报数据（去重）
+        daily_stores = []
         if date:
             cursor.execute("""
                 SELECT 店编号, 店简称, 大区, 战区,
-                       COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as "线索量-本地",
-                       COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
+                       COALESCE(CAST("线索量-本地" AS REAL), 0) as "线索量-本地",
+                       COALESCE(CAST(到店数 AS REAL), 0) as 到店数
                 FROM 日报快照
                 WHERE 日报数据日期 = ?
-                GROUP BY 店编号, 店简称, 大区, 战区
                 ORDER BY 店编号
             """, (date,))
+            daily_stores = [dict(row) for row in cursor.fetchall()]
         else:
-            # 如果没有日期，获取最近日期的日报
+            # 如果没有日期，获取最近日期的日报（不用MAX，按最新日期）
             cursor.execute("""
-                SELECT DISTINCT 日报数据日期 FROM 日报快照 ORDER BY 日报数据日期 DESC LIMIT 1
+                SELECT DISTINCT 日报数据日期 FROM 日报快照 ORDER BY 
+                CAST(SUBSTR(日报数据日期, 1, INSTR(日报数据日期, '/') - 1) AS INTEGER) DESC,
+                CAST(SUBSTR(日报数据日期, INSTR(日报数据日期, '/') + 1) AS INTEGER) DESC
+                LIMIT 1
             """)
             latest_date_row = cursor.fetchone()
             latest_date = latest_date_row['日报数据日期'] if latest_date_row else None
@@ -938,18 +1625,16 @@ def manage_follow_records():
             if latest_date:
                 cursor.execute("""
                     SELECT 店编号, 店简称, 大区, 战区,
-                           COALESCE(MAX(CAST("线索量-本地" AS REAL)), 0) as "线索量-本地",
-                           COALESCE(MAX(CAST(到店数 AS REAL)), 0) as 到店数
+                           COALESCE(CAST("线索量-本地" AS REAL), 0) as "线索量-本地",
+                           COALESCE(CAST(到店数 AS REAL), 0) as 到店数
                     FROM 日报快照
                     WHERE 日报数据日期 = ?
-                    GROUP BY 店编号, 店简称, 大区, 战区
                     ORDER BY 店编号
                 """, (latest_date,))
+                daily_stores = [dict(row) for row in cursor.fetchall()]
             else:
                 conn.close()
                 return jsonify({'success': True, 'data': []})
-        
-        daily_stores = [dict(row) for row in cursor.fetchall()]
         
         # 解析任务的门店列表（去重）
         task_store_codes = []
@@ -1028,25 +1713,50 @@ def manage_follow_records():
             store_code = store['店编号']
             record = record_dict.get(store_code)
             
+            # ------------------------------
+            # 获取基准数据
+            # ------------------------------
+            基准线索量 = 0
+            基准到店数 = 0
+            基准到店率 = 0
+            if store_code in 基准店数据:
+                基准线索量 = 基准店数据[store_code]['线索量']
+                基准到店数 = 基准店数据[store_code]['到店数']
+                基准到店率 = 基准店数据[store_code]['到店率']
+            
+            # ------------------------------
+            # 获取最新数据
+            # ------------------------------
             try:
-                线索量 = float(store['线索量-本地'])
-                到店数 = float(store['到店数'])
-                if 线索量 > 0:
-                    到店率 = round(到店数 / 线索量 * 100, 2)
+                最新线索量 = float(store['线索量-本地'])
+                最新到店数 = float(store['到店数'])
+                if 最新线索量 > 0:
+                    最新到店率 = round(最新到店数 / 最新线索量 * 100, 2)
                 else:
-                    到店率 = 0
+                    最新到店率 = 0
             except:
-                线索量 = 0
-                到店数 = 0
-                到店率 = 0
+                最新线索量 = 0
+                最新到店数 = 0
+                最新到店率 = 0
+            
+            # ------------------------------
+            # 计算增量
+            # ------------------------------
+            到店数增量 = round(最新到店数 - 基准到店数, 2)
+            到店率变化 = round(最新到店率 - 基准到店率, 2)
             
             result.append({
                 '店编号': store_code,
                 '店简称': store['店简称'],
                 '大区': store['大区'],
-                '线索量本地': 线索量,
-                '到店数': 到店数,
-                '到店率': 到店率,
+                '线索量本地': 基准线索量,
+                '到店数': 基准到店数,
+                '到店率': 基准到店率,
+                '最新线索量': 最新线索量,
+                '最新到店数': 最新到店数,
+                '最新到店率': 最新到店率,
+                '到店数增量': 到店数增量,
+                '到店率变化': 到店率变化,
                 '跟进原因': record['跟进原因'] if record else None,
                 '备注': record['备注'] if record else None,
                 '已跟进': record is not None,
@@ -1093,71 +1803,59 @@ def manage_follow_record(record_id=None):
     if request.method == 'POST' or request.method == 'PUT':
         data = request.get_json()
         
-        # 兼容不同的字段名
         task_id = data.get('taskId') or data.get('任务ID')
         store_code = data.get('storeCode') or data.get('店编号')
-        follow_date = data.get('date') or data.get('日报数据日期')
         reason = data.get('reason') or data.get('跟进原因')
         remark = data.get('remark') or data.get('备注')
         operator = data.get('operator') or data.get('操作人')
         
-        # 如果是PUT且有record_id，更新现有记录
-        if record_id or data.get('记录ID'):
-            rec_id = record_id or data.get('记录ID')
-            
-            updates = []
-            params = []
-            
-            if reason:
-                updates.append("跟进原因 = ?")
-                params.append(reason)
-            if remark:
-                updates.append("备注 = ?")
-                params.append(remark)
-            if operator:
-                updates.append("操作人 = ?")
-                params.append(operator)
-            
-            if updates:
-                params.append(rec_id)
-                cursor.execute(f"""
-                    UPDATE 跟进记录
-                    SET {', '.join(updates)}
-                    WHERE 记录ID = ?
-                """, params)
-                conn.commit()
-            
+        if not all([task_id, store_code]):
             conn.close()
-            return jsonify({'success': True, 'message': '更新成功', 'data': {'记录ID': rec_id}})
-        else:
-            # 创建新记录
-            if not all([task_id, store_code, follow_date]):
-                conn.close()
-                return jsonify({'success': False, 'message': '缺少必要参数'})
-            
-            # 获取门店信息
-            cursor.execute("""
-                SELECT 店简称, COALESCE("线索量-本地", 0) as "线索量-本地", COALESCE(到店数, 0) as 到店数
-                FROM 日报快照
-                WHERE 店编号 = ? AND 日报数据日期 = ?
-                LIMIT 1
-            """, (store_code, follow_date))
-            store_info = cursor.fetchone()
-            
-            店简称 = store_info['店简称'] if store_info else ''
-            线索量本地 = store_info['线索量-本地'] if store_info else 0
-            到店数 = store_info['到店数'] if store_info else 0
-            
-            cursor.execute("""
-                INSERT INTO 跟进记录 
-                (任务ID, 日报数据日期, 店编号, 店简称, "线索量-本地", 到店数, 跟进原因, 备注, 操作人, 创建时间)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            """, (task_id, follow_date, store_code, 店简称, 线索量本地, 到店数, reason, remark, operator))
-            
-            record_id = cursor.lastrowid
-            conn.commit()
+            return jsonify({'success': False, 'message': '缺少必要参数'})
+        
+        # 获取任务的基准日期
+        cursor.execute("SELECT 周开始日期, 基准日期, 基准数据 FROM 跟进任务 WHERE 任务ID = ?", (task_id,))
+        task_info = cursor.fetchone()
+        
+        if not task_info:
             conn.close()
-            return jsonify({'success': True, 'message': '保存成功', 'data': {'记录ID': record_id}})
+            return jsonify({'success': False, 'message': '任务不存在'})
+        
+        基准日期 = task_info['基准日期'] or task_info['周开始日期']
+        
+        if not 基准日期:
+            conn.close()
+            return jsonify({'success': False, 'message': '任务缺少基准日期，无法保存跟进记录'})
+        
+        # 从基准数据中获取门店信息
+        店简称 = ''
+        线索量本地 = 0
+        到店数 = 0
+        
+        if task_info['基准数据']:
+            try:
+                import json
+                base_stores = json.loads(task_info['基准数据'])
+                for store in base_stores:
+                    if store.get('店编号') == store_code:
+                        店简称 = store.get('店简称', '')
+                        线索量本地 = float(store.get('线索量-本地', 0) or 0)
+                        到店数 = float(store.get('到店数', 0) or 0)
+                        break
+            except:
+                pass
+        
+        # 每次都新增一条跟进记录（保留历史）
+        cursor.execute("""
+            INSERT INTO 跟进记录 
+            (任务ID, 日报数据日期, 店编号, 店简称, "线索量-本地", 到店数, 跟进原因, 备注, 操作人, 创建时间, 跟进时间)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        """, (task_id, 基准日期, store_code, 店简称, 线索量本地, 到店数, reason, remark, operator))
+        
+        record_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': '保存成功', 'data': {'记录ID': record_id}})
     
     elif request.method == 'DELETE':
         cursor.execute("DELETE FROM 跟进记录 WHERE 记录ID = ?", (record_id,))
@@ -2251,8 +2949,8 @@ def admin_manage_users():
         # 创建用户
         hashed_password = hash_password(password)
         cursor.execute("""
-            INSERT INTO 用户表 (用户名, 密码, 显示名称, 角色, 状态)
-            VALUES (?, ?, ?, ?, '启用')
+            INSERT INTO 用户表 (用户名, 密码, 显示名称, 角色, 状态, 创建时间)
+            VALUES (?, ?, ?, ?, '启用', datetime('now'))
         """, (username, hashed_password, display_name or username, role))
         
         user_id = cursor.lastrowid
@@ -2496,6 +3194,425 @@ def clear_login_logs():
     })
     
     return jsonify({'success': True, 'message': f'已删除 {deleted_count} 条日志'})
+
+# ==================== 门店管理API ====================
+
+@app.route('/store_management')
+def store_management_page():
+    """门店管理页面"""
+    if not check_login():
+        return redirect(url_for('login'))
+    
+    if not check_permission('store_management'):
+        return render_template('no_permission.html', message='您没有访问门店管理页面的权限')
+    
+    return render_template('store_management.html')
+
+@app.route('/api/store_management/stores', methods=['GET'])
+def get_store_management_stores():
+    """获取门店管理列表（分页、筛选）"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not check_permission('store_management'):
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 50, type=int)
+    大区 = request.args.get('大区', '')
+    战区 = request.args.get('战区', '')
+    门店状态 = request.args.get('门店状态', '')
+    门店评级 = request.args.get('门店评级', '')
+    search = request.args.get('search', '')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='leads_store'")
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({
+                'success': True,
+                'data': {
+                    'stores': [],
+                    'total': 0,
+                    'page': 1,
+                    'page_size': page_size,
+                    'total_pages': 0
+                }
+            })
+        
+        sql = """
+            SELECT 
+                l.大区, l.大区督导, l.大区经理, l.大区副经理,
+                l.战区, l.战区经理, l.巡回员,
+                l.店编号, l.店简称,
+                m.管理ID, m.门店状态, m.门店评级, m.状态备注, m.管理员备注,
+                m.创建时间, m.更新时间
+            FROM leads_store l
+            LEFT JOIN 门店管理配置表 m ON l.店编号 = m.店编号
+            WHERE 1=1
+        """
+        params = []
+        
+        if 大区:
+            sql += " AND l.大区 = ?"
+            params.append(大区)
+        if 战区:
+            sql += " AND l.战区 = ?"
+            params.append(战区)
+        if 门店状态:
+            sql += " AND m.门店状态 = ?"
+            params.append(门店状态)
+        if 门店评级:
+            sql += " AND m.门店评级 = ?"
+            params.append(门店评级)
+        if search:
+            sql += " AND (l.店编号 LIKE ? OR l.店简称 LIKE ?)"
+            params.extend([f'%{search}%', f'%{search}%'])
+        
+        count_sql = "SELECT COUNT(*) as total FROM leads_store l LEFT JOIN 门店管理配置表 m ON l.店编号 = m.店编号 WHERE 1=1"
+        
+        if 大区:
+            count_sql += " AND l.大区 = ?"
+        if 战区:
+            count_sql += " AND l.战区 = ?"
+        if 门店状态:
+            count_sql += " AND m.门店状态 = ?"
+        if 门店评级:
+            count_sql += " AND m.门店评级 = ?"
+        if search:
+            count_sql += " AND (l.店编号 LIKE ? OR l.店简称 LIKE ?)"
+        
+        count_params = []
+        if 大区:
+            count_params.append(大区)
+        if 战区:
+            count_params.append(战区)
+        if 门店状态:
+            count_params.append(门店状态)
+        if 门店评级:
+            count_params.append(门店评级)
+        if search:
+            count_params.extend([f'%{search}%', f'%{search}%'])
+        
+        cursor.execute(count_sql, count_params)
+        total = cursor.fetchone()['total']
+        
+        sql += " ORDER BY l.大区, l.战区, l.店编号"
+        sql += " LIMIT ? OFFSET ?"
+        params.extend([page_size, (page - 1) * page_size])
+        
+        cursor.execute(sql, params)
+        stores = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'stores': stores,
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': (total + page_size - 1) // page_size if total > 0 else 0
+            }
+        })
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False, 'message': f'查询失败: {str(e)}'})
+    
+@app.route('/api/store_management/store/update', methods=['POST'])
+def update_store_management():
+    """更新门店管理信息"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not check_permission('store_management'):
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    data = request.get_json()
+    店编号 = data.get('店编号')
+    门店状态 = data.get('门店状态', '正常')
+    门店评级 = data.get('门店评级', '')
+    状态备注 = data.get('状态备注', '')
+    管理员备注 = data.get('管理员备注', '')
+    
+    if not 店编号:
+        return jsonify({'success': False, 'message': '店编号不能为空'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT 管理ID FROM 门店管理配置表 WHERE 店编号 = ?", (店编号,))
+    existing = cursor.fetchone()
+    
+    if existing:
+        cursor.execute("""
+            UPDATE 门店管理配置表
+            SET 门店状态 = ?, 门店评级 = ?, 状态备注 = ?, 管理员备注 = ?, 更新时间 = datetime('now')
+            WHERE 店编号 = ?
+        """, (门店状态, 门店评级, 状态备注, 管理员备注, 店编号))
+    else:
+        cursor.execute("""
+            INSERT INTO 门店管理配置表 (店编号, 门店状态, 门店评级, 状态备注, 管理员备注)
+            VALUES (?, ?, ?, ?, ?)
+        """, (店编号, 门店状态, 门店评级, 状态备注, 管理员备注))
+    
+    conn.commit()
+    conn.close()
+    
+    log_operation(session.get('username', ''), '门店管理', '更新门店', {
+        '店编号': 店编号,
+        '门店状态': 门店状态,
+        '门店评级': 门店评级,
+        '状态备注': 状态备注
+    })
+    
+    return jsonify({'success': True, 'message': '更新成功'})
+
+@app.route('/api/store_management/statuses', methods=['GET'])
+def get_store_statuses():
+    """获取门店状态或评级列表"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not check_permission('store_management'):
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    config_type = request.args.get('type', '状态')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 状态ID, 状态名称, 状态颜色, 排序, 配置类型
+        FROM 门店状态配置表
+        WHERE 配置类型 = ?
+        ORDER BY 排序
+    """, (config_type,))
+    
+    statuses = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'success': True, 'data': statuses})
+
+@app.route('/api/store_management/status', methods=['POST'])
+def manage_store_status():
+    """管理门店状态或评级（添加、更新、删除）"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '仅管理员可执行此操作'})
+    
+    data = request.get_json()
+    action = data.get('action')
+    config_type = data.get('config_type', '状态')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if action == 'add':
+        状态名称 = data.get('状态名称', '').strip()
+        状态颜色 = data.get('状态颜色', '#6c757d')
+        
+        if not 状态名称:
+            conn.close()
+            return jsonify({'success': False, 'message': '名称不能为空'})
+        
+        cursor.execute("""
+            INSERT INTO 门店状态配置表 (状态名称, 状态颜色, 配置类型)
+            VALUES (?, ?, ?)
+        """, (状态名称, 状态颜色, config_type))
+        status_id = cursor.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        log_operation(session.get('username', ''), '门店管理', f'添加{config_type}', {
+            f'{config_type}名称': 状态名称,
+            '颜色': 状态颜色
+        })
+        
+        return jsonify({'success': True, 'message': '添加成功', 'status_id': status_id})
+    
+    elif action == 'update':
+        状态ID = data.get('状态ID')
+        状态名称 = data.get('状态名称', '').strip()
+        状态颜色 = data.get('状态颜色', '#6c757d')
+        
+        if not 状态ID or not 状态名称:
+            conn.close()
+            return jsonify({'success': False, 'message': '缺少必要参数'})
+        
+        cursor.execute("""
+            UPDATE 门店状态配置表
+            SET 状态名称 = ?, 状态颜色 = ?
+            WHERE 状态ID = ?
+        """, (状态名称, 状态颜色, 状态ID))
+        
+        conn.commit()
+        conn.close()
+        
+        log_operation(session.get('username', ''), '门店管理', f'更新{config_type}', {
+            'ID': 状态ID,
+            '名称': 状态名称
+        })
+        
+        return jsonify({'success': True, 'message': '更新成功'})
+    
+    elif action == 'delete':
+        状态ID = data.get('状态ID')
+        
+        if not 状态ID:
+            conn.close()
+            return jsonify({'success': False, 'message': '缺少ID'})
+        
+        cursor.execute("SELECT 状态名称, 配置类型 FROM 门店状态配置表 WHERE 状态ID = ?", (状态ID,))
+        status = cursor.fetchone()
+        if status:
+            cursor.execute("DELETE FROM 门店状态配置表 WHERE 状态ID = ?", (状态ID,))
+            conn.commit()
+            
+            log_operation(session.get('username', ''), '门店管理', f'删除{status["配置类型"]}', {
+                'ID': 状态ID,
+                '名称': status['状态名称']
+            })
+        
+        conn.close()
+        return jsonify({'success': True, 'message': '删除成功'})
+    
+    conn.close()
+    return jsonify({'success': False, 'message': '无效的操作'})
+
+@app.route('/api/store_management/ratings', methods=['GET'])
+def get_store_ratings():
+    """获取门店评级列表"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not check_permission('store_management'):
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 状态ID, 状态名称, 状态颜色, 排序
+        FROM 门店状态配置表
+        WHERE 配置类型 = '评级'
+        ORDER BY 排序
+    """)
+    
+    ratings = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'success': True, 'data': ratings})
+
+@app.route('/api/store_management/init', methods=['POST'])
+def init_store_management():
+    """初始化门店数据（从leads.db同步）"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not require_admin():
+        return jsonify({'success': False, 'message': '仅管理员可执行此操作'})
+    
+    try:
+        leads_conn = get_leads_db_connection()
+        leads_cursor = leads_conn.cursor()
+        
+        leads_cursor.execute("""
+            SELECT 大区, 大区督导, 大区经理, 大区副经理,
+                   战区, 战区经理, 巡回员, 店编号, 店简称,
+                   商贸重点店, 非商贸重点店
+            FROM 门店表
+            ORDER BY 大区, 战区, 店编号
+        """)
+        
+        leads_stores = leads_cursor.fetchall()
+        leads_conn.close()
+        
+        if not leads_stores:
+            return jsonify({'success': False, 'message': 'leads.db中未找到门店数据'})
+        
+        db_conn = get_db_connection()
+        db_cursor = db_conn.cursor()
+        
+        db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS leads_store (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                大区 TEXT, 大区督导 TEXT, 大区经理 TEXT, 大区副经理 TEXT,
+                战区 TEXT, 战区经理 TEXT, 巡回员 TEXT,
+                店编号 TEXT UNIQUE, 店简称 TEXT,
+                商贸重点店 TEXT, 非商贸重点店 TEXT,
+                创建时间 TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        
+        imported_count = 0
+        for store in leads_stores:
+            try:
+                db_cursor.execute("""
+                    INSERT OR IGNORE INTO leads_store 
+                    (大区, 大区督导, 大区经理, 大区副经理, 战区, 战区经理, 巡回员, 店编号, 店简称, 商贸重点店, 非商贸重点店)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    store['大区'], store['大区督导'], store['大区经理'], store['大区副经理'],
+                    store['战区'], store['战区经理'], store['巡回员'], store['店编号'], store['店简称'],
+                    store['商贸重点店'], store['非商贸重点店']
+                ))
+                imported_count += 1
+            except Exception as e:
+                continue
+        
+        db_conn.commit()
+        
+        db_cursor.execute("SELECT COUNT(*) as total FROM leads_store")
+        total_stores = db_cursor.fetchone()['total']
+        db_conn.close()
+        
+        log_operation(session.get('username', ''), '门店管理', '初始化门店数据', {
+            '本次导入': imported_count,
+            '总门店数': total_stores
+        })
+        
+        return jsonify({
+            'success': True, 
+            'message': f'初始化成功！本次导入 {imported_count} 条记录，当前共有 {total_stores} 家门店'
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'})
+
+@app.route('/api/store_management/filters', methods=['GET'])
+def get_store_management_filters():
+    """获取筛选选项（大区、战区列表）"""
+    if not check_login():
+        return jsonify({'success': False, 'message': '未登录'})
+    
+    if not check_permission('store_management'):
+        return jsonify({'success': False, 'message': '无权访问'})
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT DISTINCT 大区 FROM leads_store WHERE 大区 IS NOT NULL ORDER BY 大区")
+    大区列表 = [row['大区'] for row in cursor.fetchall()]
+    
+    cursor.execute("SELECT DISTINCT 战区 FROM leads_store WHERE 战区 IS NOT NULL ORDER BY 战区")
+    战区列表 = [row['战区'] for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            '大区列表': 大区列表,
+            '战区列表': 战区列表
+        }
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5003)
